@@ -38,14 +38,22 @@ The instantaneous curvature $\kappa$ is calculated using the standard differenti
 $$\kappa = \frac{x' y'' - y' x''}{(x'^2 + y'^2)^{3/2}}$$
 *Note: To simulate real-world vehicle behavior (where riders cannot instantly snap into a lean angle), a Gaussian filter (`scipy.ndimage.gaussian_filter1d`) is applied to $\kappa$ to represent smooth weight transitions into the apex.*
 
-### 3. Motorcycle Dynamics & Lean Angle Constraint
+### 3. Ideal Racing Line Optimization (Apex Calculation)
+The simulator automatically calculates the most efficient racing line (the "ideal trajectory") for **any** given track geometry. Instead of rigidly following the geometric centerline, the algorithm maximizes the cornering radius to allow for higher speeds. It achieves this by calculating an optimal lateral track offset ($n_{ideal}$):
+1. **Look-ahead Curvature:** A wide Gaussian filter is applied to the raw curvature array to simulate a rider's forward vision and turn anticipation.
+2. **Hyperbolic Offset Mapping:** The lateral deviation from the centerline is determined using a bounded Hyperbolic Tangent function:
+$$n_{ideal} = M \cdot \tanh(\kappa_{smoothed} \cdot C)$$
+*(Where $M$ is the maximum allowed track width deviation/safety margin, and $C$ is the curve sensitivity multiplier).*
+
+This mathematical approach naturally generates the classic **"Out-In-Out"** racing line: forcing the trajectory to the outside edge before the turn, clipping the inside apex at the point of maximum curvature, and running wide on the exit.
+
+### 4. Motorcycle Dynamics & Lean Angle Constraint
 To negotiate a curve of radius $R$ ($R = 1/\kappa$) at velocity $V$, the motorcycle must bank to balance the centrifugal force with gravity ($g$). The required lean angle $\theta$ relative to the track surface is modeled as:
 $$\theta_{req} = \arctan\left(\frac{V^2 \cdot \kappa}{g}\right)$$
 The system constantly evaluates the tire grip limit ($\mu$). If $\theta_{req} > \arctan(\mu)$, the engine triggers a **Velocity / Grip Limit Breach**.
 
-### 4. 3D Terrain Transformation
+### 5. 3D Terrain Transformation
 The 2D path is mapped into a dynamic 3D space using sequenced rotation matrices. For a given track segment with pitch angle $p$ (derived from the elevation gradient) and bank angle $b$, the local coordinates $(x, y, z)$ are transformed via:
-
 1. **Yaw** (Heading direction)
 2. **Pitch** (Track incline/decline)
 3. **Bank** (Track camber)
