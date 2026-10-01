@@ -1,65 +1,53 @@
-# 🏍️ 3D Motorcycle Racing Simulator
+# 3D Motorcycle Track Simulator & Physics Analyzer 🏍️🏁
 
-An interactive web-based simulator built with Python and Streamlit that allows users to upload 2D circuit maps, design custom 3D topography, calculate optimal physics-based racing lines, and generate 3D animations of a motorcycle navigating the track.
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://motorcycle-track-simulator-wzdthvpljduvafazu7rts8.streamlit.app/)
 
-## 🌟 Project Overview
+Welcome to the **3D Motorcycle Track Simulator**. This web-based application allows users to upload any 2D track map, automatically extract its physical geometry using computer vision, design 3D topographical features (elevation and banking), and run a synchronized 3D physics simulation to evaluate motorcycle dynamics, lean angles, and cornering limits.
 
-This tool is designed for motorsport enthusiasts, engineers, and developers interested in vehicle dynamics and trajectory optimization. By simply uploading an image of a track, the application uses advanced computer vision to extract the circuit's geometry. Users can then inject custom elevation and banking data to create a fully realized 3D environment and visualize how a motorcycle behaves under real physics constraints.
+## 🎯 Purpose of the Project
 
-## ✨ Key Features
+The goal of this tool is to bridge the gap between static 2D track layouts and dynamic 3D physics modeling. It is designed for racing enthusiasts, track designers, and engineering students who want to understand how trajectory, speed, slope, and corner radius affect the physical limits of a motorcycle. By mathematically extracting the ideal racing line, the simulator accurately predicts whether a rider at a given speed will hold the curve or breach the traction/track limits.
 
-1. **Intelligent Track Extraction**: 
-   - Upload any PNG/JPG track layout.
-   - Utilizes OpenCV with Adaptive Thresholding and morphological noise filtering to handle complex map backgrounds, logos, and varying colors.
-2. **Custom Topography Design**: 
-   - Interactive waypoint system to define elevation (meters) and banking/camber (degrees) at any point along the track.
-   - Smooth spline interpolation automatically builds continuous 3D hills and dips.
-3. **Physics-Based Trajectory Engine**: 
-   - Calculates the optimal racing line based on local cornering radii.
-   - Computes maximum safe velocity and required lean angles using real-world gravity and tire friction coefficients.
-4. **3D Animation Generation**: 
-   - Dynamically renders a 3D motorcycle model navigating the custom track.
-   - Exports the synchronized physics simulation as a visually stunning GIF.
-   - Real-time HUD displaying telemetry data (Speed, Lean Angle, Distance, Elevation).
+## 🕹️ How to Use the Simulator
 
-## 🛠️ Tech Stack
+No installation is required. You can launch the application directly from your browser using the badge above.
 
-* **Frontend/UI**: [Streamlit](https://streamlit.io/)
-* **Computer Vision**: [OpenCV](https://opencv.org/) (`opencv-python-headless`)
-* **Math & Physics**: [NumPy](https://numpy.org/), [SciPy](https://scipy.org/)
-* **3D Visualization**: [Matplotlib](https://matplotlib.org/)
+1. **Step 1: Upload Geometry**
+   * Upload an image of a race track (JPG/PNG).
+   * The system will use Computer Vision to extract the centerline.
+   * *Tip:* Adjust the **Adaptive Thresholding** or **Spline Smoothing** factor if the track has a noisy background (like map labels or watermarks) to ensure a perfectly connected geometry.
+2. **Step 2: Topography & Track Design**
+   * Navigate along the extracted track length using the slider.
+   * Inject real-world physics by assigning **Elevation** (meters) and **Banking/Camber** (degrees) at specific distance waypoints. The engine will smoothly interpolate the terrain between your points.
+3. **Step 3: 3D Simulation & Telemetry**
+   * Set your rider's speed ($V$) and offset from the center ($n$).
+   * Select a manual lean angle, or leave it at $0^\circ$ for the **Auto-Lean** algorithm to perfectly track the corner.
+   * Generate the 3D Animation to watch the motorcycle navigate the custom topography, or analyze real-time telemetry (radius, required lean, speed limits) to optimize the racing line.
 
-## 🚀 Installation
+## 🧮 The Mathematics & Physics Engine
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/Russo6699/motorcycle-track-simulator.git
-   cd motorcycle-track-simulator
-   ```
+This simulator relies heavily on applied mathematics, signal processing, and differential geometry to construct the physical environment and evaluate the dynamics.
 
-2. **Create a virtual environment (Optional but recommended):**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows use: venv\Scripts\activate
-   ```
+### 1. Geometry Extraction & Spline Interpolation
+The raw pixels from the image are converted into continuous parametric equations using B-Splines:
+We apply `scipy.interpolate.splprep` to generate a parametric curve $(x(u), y(u))$. This mathematical smoothing prevents abrupt pixel-level jitter from generating infinite physical forces during the simulation.
 
-3. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+### 2. Track Kinematics (Frenet-Serret Frame)
+To calculate physical forces, the track is analyzed as a spatial curve. We calculate the unit tangent vector $\vec{T}$ and the normal vector $\vec{N}$ at any given path distance $s$.
+The instantaneous curvature $\kappa$ is calculated using the standard differential formula:
+$$\kappa = \frac{x' y'' - y' x''}{(x'^2 + y'^2)^{3/2}}$$
+*Note: To simulate real-world vehicle behavior (where riders cannot instantly snap into a lean angle), a Gaussian filter (`scipy.ndimage.gaussian_filter1d`) is applied to $\kappa$ to represent smooth weight transitions into the apex.*
 
-## 🎮 Usage
+### 3. Motorcycle Dynamics & Lean Angle Constraint
+To negotiate a curve of radius $R$ ($R = 1/\kappa$) at velocity $V$, the motorcycle must bank to balance the centrifugal force with gravity ($g$). The required lean angle $\theta$ relative to the track surface is modeled as:
+$$\theta_{req} = \arctan\left(\frac{V^2 \cdot \kappa}{g}\right)$$
+The system constantly evaluates the tire grip limit ($\mu$). If $\theta_{req} > \arctan(\mu)$, the engine triggers a **Velocity / Grip Limit Breach**.
 
-Start the application by running the following command in your terminal:
+### 4. 3D Terrain Transformation
+The 2D path is mapped into a dynamic 3D space using sequenced rotation matrices. For a given track segment with pitch angle $p$ (derived from the elevation gradient) and bank angle $b$, the local coordinates $(x, y, z)$ are transformed via:
 
-```bash
-streamlit run app.py
-```
+1. **Yaw** (Heading direction)
+2. **Pitch** (Track incline/decline)
+3. **Bank** (Track camber)
 
-### The 3-Phase Workflow:
-1. **Upload Phase**: Choose an extraction method (Standard, Color Masking, or Math Smoothing) and upload your track image.
-2. **Design Phase**: Use the slider to travel along the extracted center-line and save elevation/banking data at specific waypoints. Click "Confirm Track Design" when finished.
-3. **Simulation Phase**: Adjust rider speed, manual lean overrides, and lateral offsets. View the static trajectory prediction or click "Generate 3D Animation Loop" to create your customized riding GIF.
-
-## 📝 License
-This project is open-source and available under the [MIT License](LICENSE).
+This ensures the 3D motorcycle model and the grid mesh visually match the calculated physical telemetry perfectly.
