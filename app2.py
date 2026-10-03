@@ -142,7 +142,7 @@ def extract_track_data_from_image(image_bytes, use_heatmap, min_val, max_val, ta
 
     return (x_smooth, y_smooth), extracted_elevations
 
-# --- Build Full Physics Model (Restored Original Math!) ---
+# --- Build Full Physics Model ---
 def build_physics_model():
     x_smooth, y_smooth = st.session_state.raw_geometry
     
@@ -163,7 +163,6 @@ def build_physics_model():
     s_arr = np.concatenate([[0], np.cumsum(ds)[:-1]])
     num_pts = len(x_track)
 
-    # Restored original normal logic
     tx = dx / ds
     ty = dy / ds
     nx = -ty
@@ -171,8 +170,6 @@ def build_physics_model():
 
     ddx = np.gradient(dx)
     ddy = np.gradient(dy)
-    
-    # Restored original kappa math
     kappa_raw = (dx * ddy - dy * ddx) / (ds**3 + 1e-9)
     kappa_arr = gaussian_filter1d(kappa_raw, sigma=200, mode='wrap')
 
@@ -184,7 +181,6 @@ def build_physics_model():
     x_inner = x_track - (track_w / 2.0) * nx
     y_inner = y_track - (track_w / 2.0) * ny
 
-    # Restored original ideal trajectory function
     u_fine = np.linspace(0, 1, num_pts)
     n_ideal = -4.2 * np.sin(4 * u_fine * 2 * np.pi) * np.cos(3 * u_fine * 2 * np.pi)
     
@@ -221,7 +217,33 @@ def build_physics_model():
 # PHASE 1: UPLOAD
 # ==========================================
 if st.session_state.phase == 'upload':
-    st.title("Step 1: Upload Track Geometry")
+    st.title("3D Motorcycle Track Simulator & Physics Analyzer 🏍️🏁")
+    
+    # Informative guide block on the first page
+    st.markdown("""
+    ### Welcome! 
+    This application transforms any 2D race track layout into an interactive **3D physical simulation environment**. 
+    
+    #### 💡 Pro Tip: Using AI & Online Data for Topography Maps
+    You can easily generate color-coded topographical track maps (like the example below) using **Artificial Intelligence (AI)** combined with real-world public data available on the internet:
+    1. Ask an AI assistant (like ChatGPT or Claude) or search online for the elevation profile and corner banking data of your desired circuit (e.g., Mugello, Nürburgring, Silverstone).
+    2. Prompt an AI image generator or use Python/Matplotlib to map those elevation values into a continuous color gradient (Hue heatmap: Blue for low/descents, Red for high/climbs).
+    3. Upload that colored map here and check the **"Extract Topography from Colors (Heatmap)"** box in the sidebar to automatically reconstruct real-world 3D elevations!
+    """)
+    
+    # Example Image Preview Section
+    st.markdown("#### 🖼️ Example Input Reference (Topographical Heatmap Map)")
+    st.info("Below is an example of a color-mapped track layout. The system reads the color spectrum to assign 3D elevations automatically:")
+    
+    col_ex1, col_ex2, col_ex3 = st.columns([1, 2, 1])
+    with col_ex2:
+        # If an example image exists locally, display it, otherwise show instructions
+        if os.path.exists("image_fba582.png"):
+            st.image("image_fba582.png", caption="Example Track Layout with Heatmap Topography", use_container_width=True)
+        else:
+            st.warning("Upload any track layout image (PNG/JPG) using the uploader below to begin.")
+
+    st.markdown("---")
     
     st.sidebar.markdown("### Handling Logos / Map Noise")
     extraction_method = st.sidebar.selectbox("Track Extraction Method", 
@@ -240,13 +262,13 @@ if st.session_state.phase == 'upload':
     heatmap_min = 0.0
     heatmap_max = 10.0
     if use_color_extraction:
-        heatmap_min = st.sidebar.number_input("Blue (Minimum) Value", value=3.0)
-        heatmap_max = st.sidebar.number_input("Red (Maximum) Value", value=8.0)
+        heatmap_min = st.sidebar.number_input("Blue (Minimum) Elevation Value (m)", value=3.0)
+        heatmap_max = st.sidebar.number_input("Red (Maximum) Elevation Value (m)", value=8.0)
 
     st.sidebar.markdown("### Base Track Parameters")
     temp_length = st.sidebar.number_input("Total Track Length (m)", value=st.session_state.track_length, step=100.0)
     
-    uploaded_file = st.file_uploader("Upload an image containing the track layout", type=['png', 'jpg', 'jpeg'])
+    uploaded_file = st.file_uploader("Upload your track layout image (PNG, JPG, JPEG)", type=['png', 'jpg', 'jpeg'])
     
     if uploaded_file is not None:
         image_bytes = uploaded_file.read()
@@ -402,7 +424,6 @@ elif st.session_state.phase == 'simulate':
         bank_deg  = bank_arr[idx_start]
         elev_curr = h_grid_full[idx_start]
         
-        # 3D Mapping fix: we negate the raw kappa so that Right Turn = Positive logic in 3D 
         kappa_curr_3d = -kappa_arr[idx_start]
         R_curr = 1.0 / (abs(kappa_curr_3d) + 1e-5)
         
@@ -446,7 +467,6 @@ elif st.session_state.phase == 'simulate':
         x_actual_ahead = [n_curr]
         dpsi_bike_arr = [0.0]
 
-        # Calculate physics track exactly ONCE
         for i in range(num_h):
             ds_curr = s_ahead[i]
             idx_h = int(((base_s + ds_curr) % t_len / t_len) * (num_pts - 1))
@@ -464,9 +484,6 @@ elif st.session_state.phase == 'simulate':
                 
                 dpsi_bike += k_bike_3d * ds_step
                 psi_rel = dpsi_bike - dpsi_road
-                
-                # If bike turns sharper right (positive psi_rel), it drifts right.
-                # In our 3D logic, Right means moving across X. Since original +n means Left, we subtract.
                 n_curr -= np.sin(psi_rel) * ds_step
                 x_actual_ahead.append(n_curr)
                 dpsi_bike_arr.append(psi_rel)
@@ -474,7 +491,6 @@ elif st.session_state.phase == 'simulate':
         xc_arr = np.array(x_centerline_ahead)
         yc_arr = np.array(y_centerline_ahead)
         
-        # Calculate road boundaries based on centerline normal in 3D
         x_road_left = []
         x_road_right = []
         x_ideal_ahead = []
@@ -487,7 +503,6 @@ elif st.session_state.phase == 'simulate':
                 
             x_road_left.append(xc_arr[i] - track_w/2.0 * np.cos(dpsi_road_temp))
             x_road_right.append(xc_arr[i] + track_w/2.0 * np.cos(dpsi_road_temp))
-            # Subtracting ideal since original +n_ideal means Left, we want to place it on the Left in 3D (-X)
             x_ideal_ahead.append(xc_arr[i] - n_ideal[idx_h] * np.cos(dpsi_road_temp))
             
         x_road_left = np.array(x_road_left)
@@ -496,7 +511,6 @@ elif st.session_state.phase == 'simulate':
         x_actual_ahead = np.array(x_actual_ahead)
         y_ahead = yc_arr
 
-        # Draw Grid
         grid_y = np.linspace(0, horizon_dist, 6)
         grid_x = np.linspace(-10, 10, 6)
         GX, GY = np.meshgrid(grid_x, grid_y)
@@ -517,7 +531,7 @@ elif st.session_state.phase == 'simulate':
         ax_3d.plot(id_x, id_y, id_z + 0.05, color='#38bdf8', lw=3.0)
         
         is_off_track_now = (base_n < -track_w/2.0 + bike_w/2.0) or (base_n > track_w/2.0 - bike_w/2.0)
-        off_left_mask  = x_actual_ahead > (track_w/2.0 - bike_w/2.0) # Remember mapped reversed in 3D
+        off_left_mask  = x_actual_ahead > (track_w/2.0 - bike_w/2.0)
         off_right_mask = x_actual_ahead < (-track_w/2.0 + bike_w/2.0)
         off_track_ahead_mask = off_left_mask | off_right_mask
         is_off_track_ahead = np.any(off_track_ahead_mask)
@@ -525,9 +539,7 @@ elif st.session_state.phase == 'simulate':
         
         actual_color = '#ef4444' if (is_off_track_now or is_off_track_ahead or is_speed_breach) else '#22c55e'
         
-        # Only show the predicted red/green line in static view. Hide it in the GIF!
         if show_future_path:
-            # Map actual offset N back to absolute X coordinates for drawing
             dpsi_temp = 0.0
             act_x_world = []
             for i in range(num_h):
@@ -538,10 +550,8 @@ elif st.session_state.phase == 'simulate':
             act_x, act_y, act_z = transform_terrain(np.array(act_x_world), y_ahead)
             ax_3d.plot(act_x, act_y, act_z + 0.08, color=actual_color, lw=3.5, ls='-')
 
-        # Determine bike position and camera bounds for the current frame
         curr_idx = anim_frame if anim_frame is not None else 0
         
-        # Position the bike perfectly along the pre-calculated physical trajectory
         dpsi_bike_frame = 0.0
         for i in range(curr_idx + 1):
             if i > 0:
@@ -557,23 +567,19 @@ elif st.session_state.phase == 'simulate':
         rad_l = np.radians(effective_bike_lean)
         
         def transform_bike(x, y, z):
-            # Lean
             cos_l, sin_l = np.cos(rad_l), np.sin(rad_l)
             xr1 = x * cos_l + z * sin_l
             zr1 = -x * sin_l + z * cos_l
             yr1 = y
 
-            # Yaw (relative to local road tangent)
             cos_yaw, sin_yaw = np.cos(byaw), np.sin(byaw)
             xr_yaw = xr1 * cos_yaw - yr1 * sin_yaw
             yr_yaw = xr1 * sin_yaw + yr1 * cos_yaw
 
-            # Translate to exact coordinate on the world map
             xr_pos = xr_yaw + bx_cart
             yr_pos = yr_yaw + by_cart
             zr_pos = zr1
 
-            # Pitch and Bank
             cos_p, sin_p = np.cos(rad_p), np.sin(rad_p)
             yr_pitch = yr_pos * cos_p - zr_pos * sin_p
             zr_pitch = yr_pos * sin_p + zr_pos * cos_p
@@ -620,7 +626,6 @@ elif st.session_state.phase == 'simulate':
         rx, ry, rz = transform_bike(0.0, 0.1, 2.3)
         ax_3d.scatter([rx], [ry], [rz], color='#f8fafc', s=280, depthshade=False, edgecolors='#38bdf8', linewidths=2)
 
-        # Move the camera dynamically to track the bike's exact progression over the fixed curve
         cx_t, cy_t, _ = transform_terrain(np.array([cx_base]), np.array([cy_base]))
         c_x = cx_t[0]
         c_y = cy_t[0]
@@ -628,7 +633,6 @@ elif st.session_state.phase == 'simulate':
         ax_3d.set_ylim(c_y - 4.0, c_y + 50.0)
         ax_3d.set_zlim(-1.0, 10.0)
 
-        # Draw HUD Text
         ax_3d.text2D(0.02, 0.95, "SYNCHRONIZED 3D MOTORCYCLE & HORIZON DYNAMICS", transform=ax_3d.transAxes, 
                      color='#f8fafc', fontsize=11, fontweight='bold',
                      bbox=dict(boxstyle='round,pad=0.4', facecolor='#0f172a', edgecolor='#334155', alpha=0.9))
@@ -677,11 +681,7 @@ elif st.session_state.phase == 'simulate':
                 
                 def update(frame):
                     ax_anim.clear()
-                    # CRITICAL FIX: The base calculation parameters (s_val) NEVER change during animation.
-                    # The physics are calculated perfectly ONE TIME. 
-                    # The frame parameter simply moves the camera and the bike along the pre-drawn path!
                     draw_3d_scene(ax_anim, s_val, n_val, V_kmh, user_theta_deg, anim_frame=frame, show_future_path=False)
-                    
                     ax_anim.view_init(elev=16, azim=-90)
                     ax_anim.set_box_aspect((1.0, 1.8, 0.45))
                     ax_anim.set_axis_off()
@@ -716,5 +716,5 @@ elif st.session_state.phase == 'simulate':
         - **Distance:** {s_val:.0f} m out of {t_len:.0f} m | **Elevation:** {elev:.1f} m | **Curve Radius:** {r_c:.1f} m
         - **Current Speed:** {V_kmh:.0f} km/h | **Max Cornering Speed:** {v_max:.0f} km/h
         - **Lean Angle:** {eff_lean:+.1f}° | **Required Angle:** {req_lean:+.1f}°
-        - **Lateral Offset (n):** {n_val:+.1f} m | **Slope:** {slp:+.1f}° | **Bank (Camber):** {bnk:+.1f}°
+        - **Lateral Offset (n):** {n_val:+.1f} m | **Slope:** {slope_deg:+.1f}° | **Bank (Camber):** {bnk:+.1f}°
         """)
