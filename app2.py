@@ -219,27 +219,29 @@ def build_physics_model():
 if st.session_state.phase == 'upload':
     st.title("3D Motorcycle Track Simulator & Physics Analyzer 🏍️🏁")
     
-    # Informative guide block on the first page
     st.markdown("""
     ### Welcome! 
     This application transforms any 2D race track layout into an interactive **3D physical simulation environment**. 
     
     #### 💡 Pro Tip: Using AI & Online Data for Topography Maps
-    You can easily generate color-coded topographical track maps (like the example below) using **Artificial Intelligence (AI)** combined with real-world public data available on the internet:
-    1. Ask an AI assistant (like ChatGPT or Claude) or search online for the elevation profile and corner banking data of your desired circuit (e.g., Mugello, Nürburgring, Silverstone).
+    You can easily generate color-coded topographical track maps using **Artificial Intelligence (AI)** combined with real-world public data available on the internet:
+    1. Ask an AI assistant (like ChatGPT or Claude) or search online for the elevation profile and corner banking data of your desired circuit.
     2. Prompt an AI image generator or use Python/Matplotlib to map those elevation values into a continuous color gradient (Hue heatmap: Blue for low/descents, Red for high/climbs).
     3. Upload that colored map here and check the **"Extract Topography from Colors (Heatmap)"** box in the sidebar to automatically reconstruct real-world 3D elevations!
     """)
     
-    # Example Image Preview Section
-    st.markdown("#### 🖼️ Example Input Reference (Topographical Heatmap Map)")
-    st.info("Below is an example of a color-mapped track layout. The system reads the color spectrum to assign 3D elevations automatically:")
+    # Track Name Header Above Image Example
+    st.markdown("#### 🏁 Track Reference Example: Mugello Circuit (Topographical Heatmap)")
+    st.info("The system reads the color spectrum below (Blue-to-Red heatmap) to reconstruct continuous 3D elevations automatically:")
     
     col_ex1, col_ex2, col_ex3 = st.columns([1, 2, 1])
     with col_ex2:
-        # If an example image exists locally, display it, otherwise show instructions
-        if os.path.exists("image_fba582.png"):
-            st.image("image_fba582.png", caption="Example Track Layout with Heatmap Topography", use_container_width=True)
+        # Looking for the image file in the directory
+        img_filename = "Screenshot 2026-09-30 130324.png"
+        if os.path.exists(img_filename):
+            st.image(img_filename, caption="Mugello Circuit - Elevation Heatmap Layout", use_container_width=True)
+        elif os.path.exists("image_fba582.png"):
+            st.image("image_fba582.png", caption="Track Layout with Heatmap Topography", use_container_width=True)
         else:
             st.warning("Upload any track layout image (PNG/JPG) using the uploader below to begin.")
 
