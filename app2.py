@@ -230,20 +230,16 @@ if st.session_state.phase == 'upload':
     3. Upload that colored map here and check the **"Extract Topography from Colors (Heatmap)"** box in the sidebar to automatically reconstruct real-world 3D elevations!
     """)
     
-    # Track Name Header Above Image Example
     st.markdown("#### 🏁 Track Reference Example: Mugello Circuit (Topographical Heatmap)")
     st.info("The system reads the color spectrum below (Blue-to-Red heatmap) to reconstruct continuous 3D elevations automatically:")
     
     col_ex1, col_ex2, col_ex3 = st.columns([1, 2, 1])
     with col_ex2:
-        # Looking for the image file in the directory
-        img_filename = "Screenshot 2026-09-30 130324.png"
+        img_filename = "track_example.png"
         if os.path.exists(img_filename):
             st.image(img_filename, caption="Mugello Circuit - Elevation Heatmap Layout", use_container_width=True)
-        elif os.path.exists("image_fba582.png"):
-            st.image("image_fba582.png", caption="Track Layout with Heatmap Topography", use_container_width=True)
         else:
-            st.warning("Upload any track layout image (PNG/JPG) using the uploader below to begin.")
+            st.warning("`track_example.png` not found in root directory. Please upload any track layout image below to begin.")
 
     st.markdown("---")
     
@@ -422,9 +418,9 @@ elif st.session_state.phase == 'simulate':
         idx_start = int((base_s / t_len) * (num_pts - 1))
         idx_start = np.clip(idx_start, 0, num_pts - 1)
 
-        slope_deg = slope_arr[idx_start]
-        bank_deg  = bank_arr[idx_start]
-        elev_curr = h_grid_full[idx_start]
+        slope_deg = float(slope_arr[idx_start])
+        bank_deg  = float(bank_arr[idx_start])
+        elev_curr = float(h_grid_full[idx_start])
         
         kappa_curr_3d = -kappa_arr[idx_start]
         R_curr = 1.0 / (abs(kappa_curr_3d) + 1e-5)
@@ -718,5 +714,5 @@ elif st.session_state.phase == 'simulate':
         - **Distance:** {s_val:.0f} m out of {t_len:.0f} m | **Elevation:** {elev:.1f} m | **Curve Radius:** {r_c:.1f} m
         - **Current Speed:** {V_kmh:.0f} km/h | **Max Cornering Speed:** {v_max:.0f} km/h
         - **Lean Angle:** {eff_lean:+.1f}° | **Required Angle:** {req_lean:+.1f}°
-        - **Lateral Offset (n):** {n_val:+.1f} m | **Slope:** {slope_deg:+.1f}° | **Bank (Camber):** {bnk:+.1f}°
+        - **Lateral Offset (n):** {n_val:+.1f} m | **Slope:** {slp:+.1f}° | **Bank (Camber):** {bnk:+.1f}°
         """)
