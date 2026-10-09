@@ -1,0 +1,1607 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>מסלול תלת־ממד</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&family=Secular+One&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+/* Layout: control rail on the right, map + 3D side by side, profile charts as a full-width strip below */
+:root{
+  --bg:#eef0ec; --panel:#fbfbf8; --ink:#1d2421; --muted:#5d6862; --line:#d3d8d2;
+  --accent:#d5741f; --accent-ink:#fff; --road:#2b3330; --lean:#6d4bd8; --bridge:#2a7de1; --breach:#d6402f; --cmp:#7d8782; --good:#2f9e57;
+  --hud-bg:rgba(14,18,16,.74); --hud-ink:#f3f5f2; --hud-mut:#a9b4ad; --hud-needle:#ffb24a; --hud-brake:#ff7a66; --hud-go:#7fe0a0; --hud-warn:#ffd166;
+  --g0:#3d9a5b; --g1:#9bbb3a; --g2:#e3b62b; --g3:#e07a24; --g4:#c83a2e; --g5:#7a1f4a;
+  --f-display:"Secular One","Assistant",system-ui,sans-serif;
+  --f-body:"Assistant",system-ui,"Segoe UI",Arial,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#141917; --panel:#1c2220; --ink:#e7ebe6; --muted:#97a39c; --line:#2f3834;
+  --accent:#ef8c35; --accent-ink:#1a1206; --road:#cfd6d1; --lean:#a68ff2; --bridge:#5aa2f0; --breach:#f06a55; --cmp:#9aa49f; --good:#5cc985; color-scheme:dark}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--f-body);display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:16px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+header h1{font:22px/1 var(--f-display);margin:0;letter-spacing:.2px}
+header .sub{color:var(--muted);font-size:13px}
+.app{flex:1;display:grid;grid-template-columns:320px 1fr 1fr;grid-template-rows:1fr 250px;gap:1px;background:var(--line);min-height:0}
+.rail{grid-row:1 / span 2;background:var(--panel);padding:14px 16px;overflow:auto;display:flex;flex-direction:column;gap:18px}
+.pane{position:relative;background:var(--panel);min-width:0;min-height:0}
+#map{position:absolute;inset:0}
+#view3d{position:absolute;inset:0}
+#view3d canvas{display:block}
+.profile{grid-column:2 / span 2;background:var(--panel);position:relative;min-width:0}
+#prof{position:absolute;inset:0;width:100%;height:100%}
+.tag{position:absolute;top:10px;inset-inline-start:10px;z-index:500;background:var(--panel);border:1px solid var(--line);padding:3px 9px;border-radius:4px;font-size:12px;font-weight:700;letter-spacing:.6px;color:var(--muted)}
+.tabs{position:absolute;top:8px;inset-inline-start:10px;z-index:5;display:flex;gap:4px}
+.tabs button{font-size:12px;padding:3px 10px;font-weight:700}
+h2{font:13px/1 var(--f-body);font-weight:700;letter-spacing:.8px;color:var(--muted);margin:0 0 8px}
+.group{display:flex;flex-direction:column;gap:8px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+button,select,input[type=text],input[type=password],input[type=number]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 11px;min-width:0}
+input[type=number]{font-family:var(--f-mono);font-size:14px;direction:ltr;text-align:right;padding:5px 8px;width:100%}
+button{cursor:pointer}
+button:hover{border-color:var(--muted)}
+button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700;width:100%;padding:10px}
+button.on{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+button:disabled{opacity:.5;cursor:default}
+label{font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+label.check{flex-direction:row;align-items:center;gap:8px;color:var(--ink)}
+input[type=range]{accent-color:var(--accent);width:100%}
+input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px}
+details{border:1px solid var(--line);border-radius:6px;padding:6px 10px;background:var(--bg)}
+details>summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--muted)}
+details[open]>summary{margin-bottom:8px}
+details .group{gap:8px}
+.search{display:flex;gap:6px}
+.search input{flex:1;min-width:0}
+#results{display:flex;flex-direction:column;gap:2px;max-height:150px;overflow:auto}
+#results button{text-align:start;font-size:13px;border:0;background:transparent;padding:4px 6px}
+#results button:hover{background:var(--bg)}
+.pts,.note{font-size:13px;color:var(--muted)}
+.note a{color:inherit}
+#status,#dynStatus{font-size:13px;padding:8px 10px;border-radius:6px;background:var(--bg);border:1px solid var(--line);white-space:pre-wrap}
+#status.err,#dynStatus.err{border-color:var(--g4);color:var(--g4)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
+.stat .k{font-size:12px;color:var(--muted)}
+.stat .v{font:500 17px/1.2 var(--f-mono);font-variant-numeric:tabular-nums;direction:ltr;text-align:right}
+.legend{display:flex;flex-wrap:wrap;gap:6px 10px;font-size:12px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:4px}
+.legend i{width:14px;height:8px;border-radius:2px;display:inline-block}
+.gradbar{height:10px;border-radius:3px}
+.gradlab{display:flex;justify-content:space-between;font:12px var(--f-mono);color:var(--muted);direction:ltr}
+.spec{font-size:13px;line-height:1.55;border-inline-start:3px solid var(--accent);padding-inline-start:10px}
+.spec b{font-family:var(--f-mono);font-weight:500}
+.spec a{color:var(--muted)}
+.src{font-size:12px;color:var(--muted);line-height:1.5}
+.hud{position:absolute;bottom:10px;inset-inline:10px;z-index:6;display:flex;flex-direction:column;gap:6px}
+.hud .row{gap:6px;align-items:center}
+.hud button,.hud select{background:var(--panel);font-size:13px;padding:5px 9px}
+.hud label{flex-direction:row;align-items:center;background:var(--panel);padding:2px 8px;border-radius:6px;border:1px solid var(--line);color:var(--ink)}
+.hud label input{width:90px}
+#seek{width:100%;margin:0}
+/* ride-along overlay: deliberately dark in both themes, it sits on top of the 3D scene */
+.ride{position:absolute;inset:0;pointer-events:none;z-index:4;color:var(--hud-ink);font-family:var(--f-mono)}
+.ride-top{position:absolute;top:42px;inset-inline:10px;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:var(--hud-bg);border-radius:6px;padding:3px 9px 4px;display:flex;flex-direction:column;min-width:62px}
+.chip .k{font:11px/1.3 var(--f-body);color:var(--hud-mut)}
+.chip b{font-weight:500;font-size:15px;direction:ltr;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.chip.lim.brake b{color:var(--hud-brake)} .chip.lim.accel b{color:var(--hud-go)} .chip.lim.corner b{color:var(--hud-warn)}
+.next{background:var(--hud-bg);border-radius:6px;padding:5px 10px;font:13px/1.35 var(--f-body)}
+.next b{font-family:var(--f-mono);font-weight:500;color:var(--hud-warn)}
+.ride-bottom{position:absolute;bottom:84px;inset-inline:10px;display:flex;justify-content:space-between;align-items:flex-end;gap:8px}
+.speedo{position:relative;background:var(--hud-bg);border-radius:10px;padding:6px 18px 8px;text-align:center;direction:ltr;min-width:118px}
+.speedo b{display:block;font:500 50px/1 var(--f-mono);font-variant-numeric:tabular-nums}
+.speedo span{font-size:12px;color:var(--hud-mut)}
+.sign{position:absolute;top:-14px;right:-14px;width:38px;height:38px;border-radius:50%;background:#fff;border:5px solid #d6402f;color:#111;display:grid;place-items:center;font:600 14px/1 var(--f-mono)}
+.gauge{background:var(--hud-bg);border-radius:10px;padding:6px 8px 4px}
+.gauge svg{display:block;width:150px;height:84px}
+.gauge.gm svg{width:92px;height:92px}
+.gauge .cap{font:12px/1.3 var(--f-body);color:var(--hud-mut);text-align:center}
+.gauge .cap b{font-family:var(--f-mono);font-weight:500;color:var(--hud-ink)}
+.g-arc,.g-ring{fill:none;stroke:var(--hud-mut);stroke-width:2}
+.g-ring2,.g-ax{fill:none;stroke:var(--hud-mut);stroke-width:1;opacity:.45}
+.g-tick{stroke:var(--hud-mut);stroke-width:1.5}
+.g-lim{stroke:var(--hud-brake);stroke-width:3}
+.g-needle{stroke:var(--hud-needle);stroke-width:3.5;stroke-linecap:round}
+.g-hub,.g-dot{fill:var(--hud-needle)}
+.g-lbl{fill:var(--hud-mut);font:9px var(--f-mono);text-anchor:middle}
+@media (max-width:600px){ .gauge svg{width:112px;height:63px} .gauge.gm svg{width:70px;height:70px} .speedo b{font-size:38px} .speedo{min-width:90px;padding:4px 10px 6px} .chip b{font-size:13px} }
+.leaflet-container{font-family:var(--f-body)}
+.fatal{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;gap:4px;padding:24px;max-width:46ch;margin-inline:auto;color:var(--ink)}
+.fatal b{font:20px/1.2 var(--f-display)}
+.fatal p{margin:0;color:var(--muted)}
+.locbtn{width:34px;height:34px;display:grid;place-items:center;background:#fff;cursor:pointer;color:#1d2421}
+.locbtn svg{width:18px;height:18px}
+.locbox{font-size:13px;padding:8px 10px;border-radius:6px;border:1px solid var(--line);background:var(--bg);line-height:1.5}
+.locbox.ok{border-color:var(--bridge)}
+.locbox.warn{border-color:var(--g3)}
+.empty3d{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--muted);padding:24px;pointer-events:none}
+.wp{width:16px;height:16px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px #0006}
+.cmptab{width:100%;border-collapse:collapse;font-size:13px}
+.cmptab th{font-weight:600;color:var(--muted);text-align:start;padding:3px 4px;border-bottom:1px solid var(--line)}
+.cmptab td{padding:3px 4px;border-bottom:1px solid var(--line)}
+.cmptab td.n{font-family:var(--f-mono);direction:ltr;text-align:left;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cmptab tr.best td{font-weight:700}
+.cmptab .tagsel{font-size:11px;color:var(--accent);margin-inline-start:4px}
+.cmptab .tagcmp{font-size:11px;color:var(--muted);margin-inline-start:4px}
+.ck{font-size:13px;line-height:1.6}
+.ck b{font-family:var(--f-mono);font-weight:500}
+.ck .ok{color:var(--good)} .ck .bad{color:var(--breach)}
+.prog{height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.prog i{display:block;height:100%;width:0;background:var(--accent)}
+.chip.cmp b.pos{color:var(--hud-go)} .chip.cmp b.neg{color:var(--hud-brake)}
+.warnline{font-size:12px;color:var(--muted);border-top:1px dashed var(--line);padding-top:6px}
+@media (max-width:1000px){
+  .app{grid-template-columns:1fr;grid-template-rows:auto 55vh 45vh 240px}
+  .rail{grid-row:auto}
+  .profile{grid-column:auto}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <h1>מסלול תלת־ממד</h1>
+  <span class="sub">דרך מסומנת במפה ← גבהים אמיתיים ← כביש תלת־ממדי ← קו אידיאלי ומהירויות לאופנוע</span>
+</header>
+
+<div class="app">
+  <aside class="rail">
+    <div class="group">
+      <h2>חיפוש מקום</h2>
+      <div class="search">
+        <input type="text" id="q" placeholder="למשל: מעלה עקרבים" aria-label="חיפוש מקום">
+        <button id="qbtn">חפש</button>
+      </div>
+      <div id="results"></div>
+    </div>
+
+    <div class="group">
+      <h2>סימון הדרך</h2>
+      <div class="pts" id="ptsInfo">לחיצה ראשונה = נקודת התחלה, כל לחיצה נוספת מוסיפה נקודת דרך, האחרונה היא נקודת הסוף. אפשר לגרור נקודות; לחיצה ימנית על נקודה מוחקת אותה.</div>
+      <label>אופן חיבור הנקודות
+        <select id="snap">
+          <option value="car" selected>לאורך כבישים – רכב</option>
+          <option value="bike">לאורך דרכים – אופניים</option>
+          <option value="foot">לאורך שבילים ודרכים – הליכה</option>
+          <option value="line">קווים ישרים בין הנקודות</option>
+        </select>
+      </label>
+      <div class="row">
+        <button id="me">המיקום שלי</button>
+        <button id="meStart">התחל מהמיקום שלי</button>
+      </div>
+      <div class="locbox" id="locBox" hidden></div>
+      <div class="row">
+        <button id="undo">בטל נקודה</button>
+        <button id="clear">נקה</button>
+        <button id="sample">מסלול לדוגמה</button>
+      </div>
+      <label>או טענו מסלול מוקלט (GPX)
+        <input type="file" id="gpxFile" accept=".gpx,application/gpx+xml">
+      </label>
+    </div>
+
+    <div class="group">
+      <h2>מקור נתוני גובה</h2>
+      <label>מודל גובה
+        <select id="dem">
+          <option value="terrarium" selected>AWS Terrain Tiles (SRTM, 2000)</option>
+          <option value="openmeteo">Copernicus GLO‑90 (Open‑Meteo)</option>
+          <option value="cop30">Copernicus GLO‑30 (OpenTopography, מפתח חינמי)</option>
+          <option value="gpx" disabled>גובה מקובץ ה־GPX שנטען</option>
+        </select>
+      </label>
+      <div id="keyRow" class="group" hidden>
+        <label>מפתח API של OpenTopography
+          <input type="password" id="otKey" placeholder="הדביקו כאן את המפתח" autocomplete="off">
+        </label>
+        <div class="note">נשמר רק בדפדפן הזה. מפתח חינמי: נרשמים ב־<a href="https://portal.opentopography.org/myopentopo" target="_blank" rel="noopener">MyOpenTopo</a> ולוחצים Request API Key.</div>
+      </div>
+      <label class="check"><input type="checkbox" id="osmFix" checked> תיקון גשרים ומנהרות לפי OpenStreetMap</label>
+      <label><span>חלון חישוב שיפוע: <b id="winv">50</b> מ׳</span>
+        <input type="range" id="win" min="0" max="200" step="10" value="50">
+      </label>
+      <button class="primary" id="go">חשב מסלול תלת־ממדי</button>
+      <div id="status">המפה מוכנה. סמנו נקודות על המפה.</div>
+    </div>
+
+    <div class="group">
+      <h2>נתוני המסלול</h2>
+      <div class="stats">
+        <div class="stat"><div class="k">אורך</div><div class="v" id="sLen">—</div></div>
+        <div class="stat"><div class="k">טווח גובה</div><div class="v" id="sRange">—</div></div>
+        <div class="stat"><div class="k">טיפוס מצטבר</div><div class="v" id="sUp">—</div></div>
+        <div class="stat"><div class="k">ירידה מצטברת</div><div class="v" id="sDn">—</div></div>
+        <div class="stat"><div class="k">שיפוע עלייה מרבי</div><div class="v" id="sMaxU">—</div></div>
+        <div class="stat"><div class="k">שיפוע ירידה מרבי</div><div class="v" id="sMaxD">—</div></div>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <div class="group">
+      <h2>אופנוע וקו אידיאלי</h2>
+      <label>דגם
+        <select id="moto"></select>
+      </label>
+      <div class="spec" id="spec"></div>
+      <div class="grid2">
+        <label>הספק מרבי (kW)<input type="number" id="mPow" step="0.1" min="1"></label>
+        <label>משקל אופנוע (ק״ג)<input type="number" id="mMass" step="1" min="50"></label>
+        <label>בסיס גלגלים (מ״מ)<input type="number" id="mWb" step="1" min="900"></label>
+        <label>רוכב + ציוד (ק״ג)<input type="number" id="mRider" step="1" min="0" value="85"></label>
+      </div>
+      <div class="grid2">
+        <label>משטח
+          <select id="mSurf">
+            <option value="1.15" selected>אספלט יבש, צמיגי כביש</option>
+            <option value="0.6">אספלט רטוב</option>
+            <option value="custom">ערך ידני</option>
+          </select>
+        </label>
+        <label>מקדם אחיזה μ<input type="number" id="mMu" step="0.05" min="0.1" max="1.6" value="1.15"></label>
+      </div>
+      <label>תחום תנועה לרוחב הכביש
+        <select id="corr">
+          <option value="lane" selected>הנתיב שלי בלבד (ימין)</option>
+          <option value="full">כל רוחב הכביש – מסלול סגור בלבד</option>
+        </select>
+      </label>
+      <label>שיטת חישוב הקו
+        <select id="method">
+          <option value="optimal" selected>זמן מינימלי – אופטימיזציה של אינטגרל הזמן</option>
+          <option value="mincurv">עקמומיות מינימלית (Σκ²)</option>
+          <option value="minmax">רדיוס מרבי בכל פנייה</option>
+          <option value="tanh">נוסחת tanh (M·tanh(κ·C))</option>
+          <option value="centre">מרכז התחום</option>
+        </select>
+      </label>
+      <div class="note">זמן מינימלי: ממזער את T = ∫ √((1 − n·κ)² + n′²) / v ds תחת האילוצים: |n| בתוך הכביש פחות חצי רוחב האופנוע, θ = arctan(v²κ/g) ≤ arctan(μ), v ≤ √(μ·g·R), מעגל החיכוך (a<sub>long</sub>/μg)² + (a<sub>lat</sub>/μg)² ≤ 1, הספק המנוע ו־wheelie/stoppie.</div>
+      <div class="grid2">
+        <label>השוואה מול
+          <select id="cmp">
+            <option value="centre" selected>מרכז התחום</option>
+            <option value="tanh">נוסחת tanh</option>
+            <option value="mincurv">עקמומיות מינימלית</option>
+            <option value="minmax">רדיוס מרבי</option>
+          </select>
+        </label>
+        <label class="check" style="align-self:end"><input type="checkbox" id="showCmp" checked> הצג קו השוואה</label>
+      </div>
+      <details>
+        <summary>אילוצים והנחות פיזיקליות</summary>
+        <div class="group">
+          <div class="note">ערכים אלה אינם נתוני יצרן. הם הנחות מקובלות שאפשר לשנות.</div>
+          <div class="grid2">
+            <label>זווית הטייה מרבית (°)<input type="number" id="aLean" step="1" min="20" max="65"></label>
+            <label>CdA – גרר אווירודינמי (מ״ר)<input type="number" id="aCdA" step="0.01" min="0.1" max="1.2"></label>
+            <label>גובה מרכז כובד (מ׳)<input type="number" id="aCog" step="0.01" min="0.3" max="1.2"></label>
+            <label>חלק המשקל על הגלגל הקדמי<input type="number" id="aFront" step="0.01" min="0.3" max="0.7"></label>
+            <label>נצילות הנעה<input type="number" id="aEta" step="0.01" min="0.5" max="1" value="0.9"></label>
+            <label>מקדם התנגדות גלגול<input type="number" id="aCrr" step="0.001" min="0" max="0.1" value="0.018"></label>
+            <label>צפיפות אוויר (ק״ג/מ״ק)<input type="number" id="aRho" step="0.01" min="0.8" max="1.4" value="1.2"></label>
+            <label>רוחב האופנוע (מ׳)<input type="number" id="bikeW" step="0.05" min="0.3" max="1.5" value="0.8"></label>
+            <label>מרווח בטיחות נוסף (מ׳)<input type="number" id="margin" step="0.1" min="0" max="3" value="0"></label>
+            <label>רוחב כביש כשאין נתון ב־OSM (מ׳)<input type="number" id="defW" step="0.5" min="2" max="30" value="7"></label>
+            <label>החלקת מעבר משקל σ (מ׳)<input type="number" id="sK" step="1" min="0" max="40" value="6"></label>
+            <label>tanh: מקדם רגישות C (מ׳)<input type="number" id="tC" step="10" min="5" max="1000" value="120"></label>
+            <label>tanh: מבט קדימה σ (מ׳)<input type="number" id="tLook" step="5" min="0" max="200" value="30"></label>
+            <label>תקרת מהירות (קמ״ש, 0 = ללא)<input type="number" id="vCap" step="5" min="0" max="400" value="0"></label>
+          </div>
+          <label class="check"><input type="checkbox" id="legal"> הגבל למהירות המותרת לפי OSM</label>
+          <label class="check"><input type="checkbox" id="fromRest" checked> יציאה ממקום עומד</label>
+          <label class="check"><input type="checkbox" id="stopEnd"> עצירה בנקודת הסוף</label>
+        </div>
+      </details>
+      <button class="primary" id="goDyn" disabled>חשב קו אידיאלי ומהירויות</button>
+      <div id="dynStatus" hidden></div>
+      <div class="prog" id="optProg" hidden><i id="optBar"></i></div>
+      <button id="stopOpt" hidden>עצור כאן ושמור את הקו הטוב ביותר עד עכשיו</button>
+      <div class="stats" id="dynStats" hidden>
+        <div class="stat"><div class="k">זמן משוער</div><div class="v" id="dTime">—</div></div>
+        <div class="stat"><div class="k">מהירות ממוצעת</div><div class="v" id="dAvg">—</div></div>
+        <div class="stat"><div class="k">מהירות מרבית</div><div class="v" id="dMax">—</div></div>
+        <div class="stat"><div class="k">הטייה מרבית</div><div class="v" id="dLean">—</div></div>
+        <div class="stat"><div class="k">פניות מוגבלות אחיזה</div><div class="v" id="dCorners">—</div></div>
+        <div class="stat"><div class="k">הקו שנבחר</div><div class="v" id="dLine" style="font-size:13px">—</div></div>
+      </div>
+      <div class="ck" id="ckOut" hidden></div>
+      <table class="cmptab" id="cmpTable" hidden></table>
+      <label id="colorRow" hidden>צבע הקו
+        <select id="colorBy">
+          <option value="v" selected>מהירות</option>
+          <option value="lean">זווית הטייה</option>
+          <option value="grip">ניצול אחיזה</option>
+        </select>
+      </label>
+      <div id="gradLegend" hidden><div class="gradbar" id="gradBar"></div><div class="gradlab"><span id="gMin"></span><span id="gMax"></span></div></div>
+      <div class="warnline">סימולציה פיזיקלית בלבד. בכביש ציבורי חלים מגבלת המהירות וחובת הנסיעה בנתיב.</div>
+    </div>
+
+    <div class="group">
+      <h2>תצוגה תלת־ממדית</h2>
+      <label><span>הגזמה אנכית: <b id="exv">×1 (קנה מידה אמיתי)</b></span>
+        <input type="range" id="ex" min="1" max="5" step="0.5" value="1">
+      </label>
+      <label><span>רוחב הכביש בתצוגה: <b id="wv">אוטומטי</b></span>
+        <input type="range" id="w" min="0" max="60" step="2" value="0">
+      </label>
+    </div>
+
+    <div class="group">
+      <h2>ייצוא</h2>
+      <div class="row">
+        <button id="xGpx" disabled>GPX</button>
+        <button id="xCsv" disabled>CSV</button>
+        <button id="xObj" disabled>OBJ (מודל 3D)</button>
+        <button id="xJson" disabled>GeoJSON</button>
+        <button id="xLine" disabled>CSV קו אידיאלי</button>
+      </div>
+    </div>
+
+    <div class="src">
+      מפה: Esri, © OpenStreetMap contributors. ניתוב: OSRM. גשרים, מנהרות, רוחב ומהירות מותרת: OpenStreetMap דרך Overpass. גבהים: מודל הגובה שנבחר; אם השליפה נכשלת לא מוצג שום ערך.
+      נתוני האופנועים: מפרט יצרן, קישור למקור ליד כל דגם.
+    </div>
+  </aside>
+
+  <section class="pane">
+    <span class="tag">מפה דו־ממדית</span>
+    <div id="map" dir="ltr"></div>
+  </section>
+
+  <section class="pane" id="pane3d">
+    <span class="tag">מסלול תלת־ממדי</span>
+    <div id="view3d"></div>
+    <div class="empty3d" id="empty3d">המסלול התלת־ממדי יופיע כאן אחרי החישוב.<br>סמנו דרך על המפה ולחצו "חשב מסלול תלת־ממדי".</div>
+    <div class="ride" id="ride" hidden>
+      <div class="ride-top">
+        <div class="chips">
+          <div class="chip"><span class="k">מרחק</span><b id="hDist">—</b></div>
+          <div class="chip"><span class="k">זמן</span><b id="hTime">—</b></div>
+          <div class="chip"><span class="k">גובה</span><b id="hElev">—</b></div>
+          <div class="chip"><span class="k">שיפוע</span><b id="hGrade">—</b></div>
+          <div class="chip"><span class="k">רדיוס הקו</span><b id="hRad">—</b></div>
+          <div class="chip lim" id="hLimChip"><span class="k">מגביל כרגע</span><b id="hLimit">—</b></div>
+          <div class="chip cmp" id="hCmpChip" hidden><span class="k" id="hCmpK">מול השוואה</span><b id="hCmp">—</b></div>
+        </div>
+        <div class="next" id="hNext" hidden></div>
+      </div>
+      <div class="ride-bottom">
+        <div class="gauge">
+          <svg viewBox="-75 -72 150 84" aria-hidden="true">
+            <path class="g-arc" d="M -56.29 -32.5 A 65 65 0 0 1 56.29 -32.5"/>
+            <g id="leanTicks"></g>
+            <line id="limL" class="g-lim"/><line id="limR" class="g-lim"/>
+            <g id="hNeedle"><line class="g-needle" x1="0" y1="0" x2="0" y2="-60"/><circle class="g-hub" r="5"/></g>
+          </svg>
+          <div class="cap">הטייה <b id="hLean">0°</b></div>
+        </div>
+        <div class="speedo"><b id="hSpd">0</b><span>km/h</span><div class="sign" id="hSign" hidden></div></div>
+        <div class="gauge gm">
+          <svg viewBox="-48 -48 96 96" aria-hidden="true">
+            <circle class="g-ring" r="40"/><circle class="g-ring2" r="20"/>
+            <line class="g-ax" x1="-46" y1="0" x2="46" y2="0"/><line class="g-ax" x1="0" y1="-46" x2="0" y2="46"/>
+            <circle class="g-dot" id="hGdot" r="5"/>
+          </svg>
+          <div class="cap">אחיזה <b id="hG">0.00 g</b></div>
+        </div>
+      </div>
+    </div>
+    <div class="hud">
+      <input type="range" id="seek" min="0" max="1000" value="0" hidden aria-label="מיקום בנסיעה">
+      <div class="row">
+        <button id="drive" disabled>▶ נסיעה במסלול</button>
+        <button id="pause" hidden>❚❚ השהה</button>
+        <button id="stop" hidden>■ יציאה</button>
+        <button id="fit" disabled>מבט כללי</button>
+        <select id="camMode" aria-label="זווית מצלמה">
+          <option value="chase" selected>מצלמה עוקבת</option>
+          <option value="rider">מבט רוכב</option>
+          <option value="top">מבט מלמעלה</option>
+        </select>
+        <label>קצב <b id="spdv">×1</b><input type="range" id="spd" min="0.25" max="8" step="0.25" value="1"></label>
+        <button id="fs">מסך מלא</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="profile">
+    <div class="tabs">
+      <button id="tabElev" class="on">חתך גובה</button>
+      <button id="tabSpd" disabled>מהירות והטייה</button>
+      <button id="tabCmp" disabled>פער זמנים</button>
+    </div>
+    <canvas id="prof"></canvas>
+  </section>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+function showFatal(msg){ const s=document.getElementById('status'); if(s){ s.classList.add('err'); s.textContent=msg; } }
+window.addEventListener('error', e => showFatal('שגיאה: ' + (e.message || e) + (e.lineno ? ' (שורה ' + e.lineno + ')' : '')));
+window.addEventListener('unhandledrejection', e => showFatal('שגיאה: ' + ((e.reason && e.reason.message) || e.reason)));
+window.LIBS_OK = typeof L !== 'undefined' && typeof THREE !== 'undefined' && !!THREE.OrbitControls;
+if (!window.LIBS_OK) {
+  showFatal('הספריות של המפה / התלת־ממד לא נטענו. כנראה הקובץ נפתח בתצוגה מקדימה ולא בדפדפן, או שאין חיבור לאינטרנט.');
+  const m = document.getElementById('map');
+  m.setAttribute('dir','rtl');
+  m.innerHTML = '<div class="fatal"><b>המפה לא יכולה להיטען כאן</b>' +
+    '<p>הקובץ נפתח בתצוגה מקדימה שחוסמת גישה לאינטרנט, ולכן המפה, הניתוב ונתוני הגובה לא זמינים.</p>' +
+    '<p>הורידו את הקובץ ופתחו אותו בדפדפן רגיל (Chrome / Edge / Firefox), או העלו אותו לאתר אירוח (למשל Netlify Drop).</p></div>';
+}
+</script>
+<script src="motosim.js"></script>
+<script>
+(function(){
+"use strict";
+if (!window.LIBS_OK) return;
+/* ======================= helpers ======================= */
+const $ = id => document.getElementById(id);
+const R_EARTH = 6371008.8;
+const toRad = d => d * Math.PI / 180;
+function hav(a, b){
+  const dLat = toRad(b[0]-a[0]), dLon = toRad(b[1]-a[1]);
+  const s = Math.sin(dLat/2)**2 + Math.cos(toRad(a[0]))*Math.cos(toRad(b[0]))*Math.sin(dLon/2)**2;
+  return 2*R_EARTH*Math.asin(Math.min(1, Math.sqrt(s)));
+}
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function status(msg, err){ const s=$('status'); s.textContent=msg; s.classList.toggle('err', !!err); }
+function dynStatus(msg, err){ const s=$('dynStatus'); s.hidden=!msg; s.textContent=msg||''; s.classList.toggle('err', !!err); }
+const fmtKm = m => m>=1000 ? (m/1000).toFixed(2)+' km' : Math.round(m)+' m';
+const fmtTime = (s,dec=0) => { const f=10**dec; s=Math.round(s*f)/f; const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return (h?h+':'+String(m).padStart(2,'0'):m)+':'+(x<10?'0':'')+x.toFixed(dec); };
+const store = { get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} } };
+function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=()=>rej(new Error('טעינת הספרייה נכשלה: '+src)); document.head.appendChild(s); }); }
+function nice(r){ const s=10**Math.floor(Math.log10(r)), f=r/s; return (f<1.5?1:f<3.5?2:f<7.5?5:10)*s; }
+
+/* grade buckets (absolute %) */
+const BUCKETS = [
+  {max:2,  v:'--g0', label:'0–2%'}, {max:5,  v:'--g1', label:'2–5%'}, {max:8,  v:'--g2', label:'5–8%'},
+  {max:12, v:'--g3', label:'8–12%'}, {max:18, v:'--g4', label:'12–18%'}, {max:1e9,v:'--g5', label:'18%+'},
+];
+const gradeColor = g => { const a=Math.abs(g); for(const b of BUCKETS) if(a<b.max) return css(b.v); return css('--g5'); };
+$('legend').innerHTML = BUCKETS.map(b=>`<span><i style="background:var(${b.v})"></i>${b.label}</span>`).join('')
+  + '<span><i style="background:var(--bridge)"></i>גשר/מנהרה מתוקנים</span>';
+
+/* speed / lean / grip colour ramp (cool → hot) */
+const RAMP=['#3b5bdb','#1c9fc4','#2fb67a','#9ccb3b','#f2c12e','#f08a24','#d6402f'];
+function rampColor(t){
+  t=Math.max(0,Math.min(1,t)); const x=t*(RAMP.length-1), i=Math.min(RAMP.length-2,Math.floor(x)), f=x-i;
+  const a=parseInt(RAMP[i].slice(1),16), b=parseInt(RAMP[i+1].slice(1),16);
+  const c=[16,8,0].map(s=>Math.round(((a>>s)&255)*(1-f)+((b>>s)&255)*f));
+  return '#'+c.map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+$('gradBar').style.background='linear-gradient(to left,'+RAMP.join(',')+')';
+
+/* ======================= motorcycles (manufacturer data) ======================= */
+// kW, weight and wheelbase as published; source link per model. Category values below are assumptions, not specs.
+const BIKES = [
+  {id:'r1',     name:'Yamaha YZF‑R1 (2020–25)',        cat:'sport',  kW:147.1, rpm:13500, kg:199, wk:'בסדר נסיעה',            wb:1405, src:'https://www.moto.it/listino/yamaha/yzf-r1/yzf-r1-2020-25/zuhbfL'},
+  {id:'v4s',    name:'Ducati Panigale V4 S (2025)',     cat:'sport',  kW:158.9, rpm:13500, kg:187, wk:'ללא דלק',                wb:1485, src:'https://www.moto.it/listino/ducati/panigale-v4/panigale-v4-s-2025-26/gEopnx'},
+  {id:'s1000rr',name:'BMW S 1000 RR',                   cat:'sport',  kW:154,   rpm:13750, kg:198, wk:'מוכן לנסיעה, 90% דלק',  wb:1457, src:'https://bmw-motorrad.com.au/en/models/sport/s1000rr/technicaldata.html'},
+  {id:'zx10r',  name:'Kawasaki Ninja ZX‑10R (2021–25)', cat:'sport',  kW:149.3, rpm:13200, kg:207, wk:'בסדר נסיעה',            wb:1450, src:'https://www.moto.it/listino/kawasaki/ninja-1000-zx-10r/ninja-1000-zx-10r-2021-25/eAHUxX'},
+  {id:'cbr650r',name:'Honda CBR650R (2024–26)',         cat:'sport',  kW:70,    rpm:12000, kg:209, wk:'בסדר נסיעה',            wb:1450, src:'https://www.moto.it/listino/honda/cbr-650-r/cbr-650-r-2024-26/VcS5bm'},
+  {id:'mt09',   name:'Yamaha MT‑09 (2024–26)',          cat:'naked',  kW:87.5,  rpm:10000, kg:193, wk:'בסדר נסיעה',            wb:1430, src:'https://www.moto.it/listino/yamaha/mt-09/mt-09-2024-26/ZiBUwh'},
+  {id:'mt07',   name:'Yamaha MT‑07 (2025–26)',          cat:'naked',  kW:54,    rpm:8750,  kg:183, wk:'בסדר נסיעה',            wb:1395, src:'https://www.moto.it/listino/yamaha/mt-07/mt-07-2025-26/pyRg2m'},
+  {id:'z900',   name:'Kawasaki Z900 (2025–27)',         cat:'naked',  kW:91,    rpm:9500,  kg:213, wk:'בסדר נסיעה',            wb:1450, src:'https://www.moto.it/listino/kawasaki/z-900/z-900-2025-27/FB2IYj'},
+  {id:'r1300gs',name:'BMW R 1300 GS',                   cat:'adv',    kW:107,   rpm:7750,  kg:237, wk:'מוכן לנסיעה, 90% דלק',  wb:1518, src:'https://bmw-motorrad.com.au/en/models/adventure/r1300gs/technicaldata.html'},
+  {id:'tmax',   name:'Yamaha TMAX 560 (2025–26)',       cat:'scooter',kW:35,    rpm:7000,  kg:219, wk:'בסדר נסיעה',            wb:1575, src:'https://www.moto.it/listino/yamaha/t-max-560/t-max-560-2025-26/ZRuV4e'},
+];
+const CAT = { // assumptions by category (editable in the UI)
+  sport:  {label:'ספורט',      lean:55, CdA:0.32, cog:0.60, front:0.52},
+  naked:  {label:'נייקד',      lean:50, CdA:0.45, cog:0.62, front:0.50},
+  adv:    {label:'אדוונצ׳ר',   lean:45, CdA:0.60, cog:0.68, front:0.48},
+  scooter:{label:'סקוטר',      lean:45, CdA:0.55, cog:0.58, front:0.45},
+};
+(function fillBikes(){
+  const sel=$('moto'); const groups={};
+  BIKES.forEach(b=>{ if(!groups[b.cat]){ const g=document.createElement('optgroup'); g.label=CAT[b.cat].label; sel.appendChild(g); groups[b.cat]=g; }
+    const o=document.createElement('option'); o.value=b.id; o.textContent=b.name; groups[b.cat].appendChild(o); });
+  const o=document.createElement('option'); o.value='custom'; o.textContent='מותאם אישית (הזנה ידנית)'; sel.appendChild(o);
+  sel.value=store.get('route3d.moto')||'mt09'; if(!sel.value) sel.value='mt09';
+})();
+let specEdited=false;
+function applyBike(){
+  const b=BIKES.find(x=>x.id===$('moto').value); store.set('route3d.moto',$('moto').value);
+  if(!b){ $('spec').innerHTML='ערכים ידניים. הזינו הספק, משקל ובסיס גלגלים לפי מפרט היצרן של האופנוע שלכם.'; return; }
+  const c=CAT[b.cat];
+  $('mPow').value=b.kW; $('mMass').value=b.kg; $('mWb').value=b.wb;
+  $('aLean').value=c.lean; $('aCdA').value=c.CdA; $('aCog').value=c.cog; $('aFront').value=c.front;
+  specEdited=false; renderSpec();
+}
+function renderSpec(){
+  const b=BIKES.find(x=>x.id===$('moto').value); if(!b) return;
+  $('spec').innerHTML=`מפרט יצרן: <b>${b.kW} kW</b> (${Math.round(b.kW*1.341)} hp) ב־${b.rpm.toLocaleString()} סל״ד · <b>${b.kg} ק״ג</b> ${b.wk} · בסיס גלגלים <b>${b.wb} מ״מ</b>`
+    + `<br><a href="${b.src}" target="_blank" rel="noopener">מקור הנתונים</a>`
+    + (specEdited?' · <span style="color:var(--accent)">שיניתם ערכים ידנית</span>':'');
+}
+$('moto').onchange=applyBike;
+['mPow','mMass','mWb'].forEach(id=>$(id).addEventListener('input',()=>{ specEdited=true; renderSpec(); }));
+$('mSurf').onchange=()=>{ if($('mSurf').value!=='custom') $('mMu').value=$('mSurf').value; };
+$('mMu').addEventListener('input',()=>{ $('mSurf').value='custom'; });
+applyBike();
+
+/* ======================= map ======================= */
+const map = L.map('map', {zoomControl:true}).setView([31.6, 34.95], 8);
+const esri = (svc, attribution, maxNativeZoom=19) => L.tileLayer(
+  `https://server.arcgisonline.com/ArcGIS/rest/services/${svc}/MapServer/tile/{z}/{y}/{x}`,
+  {maxZoom:21, maxNativeZoom, attribution});
+const layers = {
+  'מפת רחובות': esri('World_Street_Map', 'Tiles © Esri — Esri, HERE, Garmin, © OpenStreetMap contributors'),
+  'לוויין עם כבישים': L.layerGroup([
+      esri('World_Imagery', 'Tiles © Esri — Maxar, Earthstar Geographics'),
+      esri('Reference/World_Transportation', ''),
+      esri('Reference/World_Boundaries_and_Places', '')]),
+  'טופוגרפית (Esri)': esri('World_Topo_Map', 'Tiles © Esri — Esri, HERE, Garmin, USGS, © OpenStreetMap contributors'),
+  'טופוגרפית (OpenTopoMap)': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+      {maxZoom:17, attribution:'© OpenStreetMap contributors, SRTM | © OpenTopoMap (CC-BY-SA)'}),
+  'OpenStreetMap': L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap contributors'}),
+};
+layers['מפת רחובות'].addTo(map);
+let tileErr=0, tileErrShown=false;
+Object.values(layers).forEach(l => (l.eachLayer ? (f=>l.eachLayer(f)) : (f=>f(l)))(t => t.on('tileerror', () => {
+  if(++tileErr>12 && !tileErrShown){ tileErrShown=true; status('שכבת המפה הנוכחית לא נטענת. החליפו שכבה בכפתור השכבות שבפינת המפה.', true); }
+})));
+map.on('baselayerchange', () => { tileErr=0; tileErrShown=false; });
+L.control.layers(layers, null, {position:'topleft'}).addTo(map);
+L.control.scale({imperial:false}).addTo(map);
+const lineRenderer = L.canvas({padding:0.5});
+
+const state = { pts:[], markers:[], line:null, geom:null, prof:null, dyn:null, hoverD:null, me:null, gpx:null, tab:'elev' };
+
+/* ---------- user location (asks permission, uses it only if granted) ---------- */
+let meDot=null, meAcc=null;
+function locMsg(html, kind){ const b=$('locBox'); b.hidden=!html; b.innerHTML=html||''; b.className='locbox'+(kind?' '+kind:''); }
+function applyLocation(lat, lon, acc, label, andStart){
+  const ll=[lat,lon]; state.me=ll;
+  if(meAcc) map.removeLayer(meAcc);
+  meAcc=L.circle(ll,{radius:Math.max(acc,30), color:'#2a7de1', weight:1, fillOpacity:.08, interactive:false}).addTo(map);
+  if(!meDot) meDot=L.circleMarker(ll,{radius:8,color:'#fff',weight:3,fillColor:'#2a7de1',fillOpacity:1}).addTo(map);
+  meDot.setLatLng(ll).bindTooltip(label);
+  if(!state.prof) map.setView(ll, acc>2000 ? 12 : 15);
+  if(andStart && acc<=2000){ leaveGpx(); state.pts.unshift(ll); refreshMarkers(); previewRoute(); }
+  locMsg(`<b>${label}</b> · דיוק ±${acc>=1000?(acc/1000).toFixed(1)+' ק״מ':Math.round(acc)+' מ׳'}`
+    + (andStart && acc>2000 ? '<br>המיקום משוער מדי כדי לשמש כנקודת התחלה. סמנו אותה ידנית על המפה.' : ''), 'ok');
+}
+function getPos(opts){ return new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,opts)); }
+async function geoPermission(){
+  try{ if(navigator.permissions && navigator.permissions.query){ return await navigator.permissions.query({name:'geolocation'}); } }catch(e){}
+  return null;
+}
+let permWatch=false;
+async function locateUser(andStart){
+  if(!('geolocation' in navigator) || !window.isSecureContext){ offerApprox('הדפדפן הזה לא מאפשר איתור מיקום בעמוד הזה.'); return; }
+  const perm = await geoPermission();
+  if(perm && !permWatch){ permWatch=true; perm.onchange = () => { if(perm.state==='granted') locateUser(false); }; }
+  if(perm && perm.state==='denied'){ deniedMsg(); return; }
+  locMsg(perm && perm.state==='granted' ? 'מאתר את המיקום שלך…' : 'הדפדפן יבקש עכשיו אישור לשתף מיקום. לחצו <b>אפשר / Allow</b> בחלונית שתופיע ליד שורת הכתובת.');
+  try{
+    let pos;
+    try{ pos = await getPos({enableHighAccuracy:false, timeout:12000, maximumAge:300000}); }
+    catch(e){ if(e.code===1) throw e; pos = await getPos({enableHighAccuracy:true, timeout:20000, maximumAge:0}); }
+    applyLocation(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy, 'המיקום שלך', andStart);
+  }catch(err){
+    if(err && err.code===1) deniedMsg();
+    else offerApprox(err && err.code===3 ? 'איתור המיקום לקח יותר מדי זמן.' :
+      'הדפדפן אישר את הבקשה אבל לא הצליח לקבוע מיקום. זה קורה כששירותי המיקום של המחשב כבויים, או בדפדפנים בלי שירות מיקום מובנה.');
+  }
+}
+function deniedMsg(){
+  locMsg('<b>הגישה למיקום חסומה בדפדפן.</b><br>כדי לאפשר: לחצו על סמל המנעול או ההגדרות משמאל לכתובת האתר ← מיקום ← <b>אפשר</b>. בינתיים אפשר לחפש מקום או לגרור את המפה.', 'warn');
+}
+function offerApprox(why){
+  locMsg(`<b>${why}</b><br>ב־Windows: הגדרות ← פרטיות ואבטחה ← מיקום ← הפעילו את שירותי המיקום ואת הגישה לאפליקציות שולחן עבודה. ב־Mac: הגדרות מערכת ← פרטיות ואבטחה ← שירותי מיקום ← אפשרו לדפדפן.`
+    + `<div class="row" style="margin-top:6px"><button id="retryLoc">נסה שוב</button><button id="approxLoc">מיקום משוער לפי חיבור האינטרנט</button></div>`, 'warn');
+  $('retryLoc').onclick = () => locateUser(false);
+  $('approxLoc').onclick = approxLocation;
+}
+async function approxLocation(){
+  locMsg('מאתר מיקום משוער לפי כתובת ה־IP…');
+  const sources = [
+    async()=>{ const j=await (await fetch('https://get.geojs.io/v1/ip/geo.json')).json(); return {lat:+j.latitude, lon:+j.longitude, place:j.city||j.country}; },
+    async()=>{ const j=await (await fetch('https://ipwho.is/')).json(); if(j.success===false) throw new Error(j.message); return {lat:+j.latitude, lon:+j.longitude, place:j.city||j.country}; },
+  ];
+  for(const s of sources){
+    try{ const v=await s(); if(isFinite(v.lat)&&isFinite(v.lon)&&(v.lat||v.lon)){ applyLocation(v.lat, v.lon, 10000, 'מיקום משוער'+(v.place?' ('+v.place+')':''), false); return; } }catch(e){}
+  }
+  locMsg('<b>גם המיקום המשוער לא זמין.</b> אפשר לחפש מקום או לגרור את המפה ידנית.', 'warn');
+}
+const LocCtl = L.Control.extend({ options:{position:'topleft'}, onAdd(){
+  const d=L.DomUtil.create('div','leaflet-bar');
+  d.innerHTML='<a class="locbtn" href="#" title="המיקום שלי" role="button" aria-label="המיקום שלי"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></a>';
+  L.DomEvent.on(d,'click',e=>{ L.DomEvent.stop(e); locateUser(false); });
+  L.DomEvent.disableClickPropagation(d); return d; } });
+new LocCtl().addTo(map);
+$('me').onclick = () => locateUser(false);
+$('meStart').onclick = () => locateUser(true);
+
+/* ---------- waypoints & routing ---------- */
+function wpIcon(kind){
+  const c = kind==='start' ? '#2f9e57' : kind==='end' ? '#c83a2e' : '#d5741f';
+  return L.divIcon({className:'', html:`<div class="wp" style="background:${c}"></div>`, iconSize:[16,16], iconAnchor:[8,8]});
+}
+function refreshMarkers(){
+  state.markers.forEach(m=>map.removeLayer(m));
+  state.markers = state.pts.map((p,i)=>{
+    const kind = i===0 ? 'start' : (i===state.pts.length-1 && state.pts.length>1) ? 'end' : 'via';
+    const m = L.marker(p, {icon:wpIcon(kind), draggable:true, title: kind==='start'?'התחלה':kind==='end'?'סוף':'נקודת דרך'}).addTo(map);
+    m.on('dragend', e => { const ll=e.target.getLatLng(); state.pts[i]=[ll.lat,ll.lng]; previewRoute(); });
+    m.on('contextmenu', () => { state.pts.splice(i,1); refreshMarkers(); previewRoute(); });
+    return m;
+  });
+  $('ptsInfo').textContent = state.pts.length===0
+    ? 'לחיצה ראשונה = נקודת התחלה, כל לחיצה נוספת מוסיפה נקודת דרך, האחרונה היא נקודת הסוף. אפשר לגרור נקודות; לחיצה ימנית על נקודה מוחקת אותה.'
+    : `${state.pts.length} נקודות מסומנות (ירוק = התחלה, אדום = סוף). נקודה שנופלת על דרך ללא מוצא תיצור הלוך־חזור; גררו אותה לכביש הראשי.`;
+}
+map.on('click', e => { leaveGpx(); state.pts.push([e.latlng.lat, e.latlng.lng]); refreshMarkers(); previewRoute(); });
+$('undo').onclick = () => { state.pts.pop(); refreshMarkers(); previewRoute(); };
+$('clear').onclick = () => { leaveGpx(); state.pts=[]; refreshMarkers(); setLine(null); status('נוקה. סמנו נקודות על המפה.'); };
+$('snap').onchange = previewRoute;
+
+function setLine(geom){
+  state.geom = geom;
+  if(state.line){ map.removeLayer(state.line); state.line=null; }
+  if(geom && geom.length>1) state.line = L.polyline(geom, {color:'#1d2421', weight:5, opacity:.8}).addTo(map);
+}
+let routeSeq = 0;
+async function getRouteGeom(){
+  if(state.pts.length<2) return null;
+  if($('snap').value==='line') return state.pts.map(p=>p.slice());
+  const coords = state.pts.map(p=>`${p[1].toFixed(6)},${p[0].toFixed(6)}`).join(';');
+  const mode = $('snap').value, q = `${coords}?overview=full&geometries=geojson`;
+  const urls = {
+    car:  [`https://router.project-osrm.org/route/v1/driving/${q}`, `https://routing.openstreetmap.de/routed-car/route/v1/driving/${q}`],
+    bike: [`https://routing.openstreetmap.de/routed-bike/route/v1/driving/${q}`],
+    foot: [`https://routing.openstreetmap.de/routed-foot/route/v1/driving/${q}`],
+  }[mode];
+  let j=null, lastErr=null;
+  for(const u of urls){
+    try{ const r = await fetch(u); if(!r.ok) throw new Error('שרת הניתוב החזיר שגיאה '+r.status); j = await r.json(); break; }
+    catch(e){ lastErr=e; }
+  }
+  if(!j) throw lastErr;
+  if(j.code!=='Ok' || !j.routes || !j.routes.length) throw new Error('לא נמצא מסלול בין הנקודות ('+(j.code||'?')+')');
+  return j.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]);
+}
+async function previewRoute(){
+  const my = ++routeSeq;
+  if(state.gpx) return;
+  if(state.pts.length<2){ setLine(null); return; }
+  try{
+    status('מחשב דרך…');
+    const g = await getRouteGeom();
+    if(my!==routeSeq) return;
+    setLine(g);
+    status(`דרך מסומנת: ${fmtKm(pathLen(g))}. לחצו "חשב מסלול תלת־ממדי".`);
+  }catch(err){
+    if(my!==routeSeq) return;
+    setLine(null);
+    status('שגיאת ניתוב: '+err.message+'\nאפשר לעבור ל"קווים ישרים".', true);
+  }
+}
+function pathLen(g){ let s=0; for(let i=1;i<g.length;i++) s+=hav(g[i-1],g[i]); return s; }
+
+/* ---------- GPX import ---------- */
+function leaveGpx(){
+  if(!state.gpx) return;
+  state.gpx=null; const o=$('dem').querySelector('option[value=gpx]'); o.disabled=true;
+  if($('dem').value==='gpx') $('dem').value='terrarium';
+  $('gpxFile').value='';
+}
+$('gpxFile').onchange = async () => {
+  const f=$('gpxFile').files[0]; if(!f) return;
+  try{
+    const doc=new DOMParser().parseFromString(await f.text(),'application/xml');
+    let nodes=[...doc.getElementsByTagName('trkpt')]; if(!nodes.length) nodes=[...doc.getElementsByTagName('rtept')];
+    const pts=nodes.map(n=>{ const e=n.getElementsByTagName('ele')[0]; return {lat:+n.getAttribute('lat'), lon:+n.getAttribute('lon'), ele: e? parseFloat(e.textContent) : NaN}; })
+      .filter(p=>isFinite(p.lat)&&isFinite(p.lon));
+    const clean=[]; pts.forEach(p=>{ const q=clean[clean.length-1]; if(!q || hav([q.lat,q.lon],[p.lat,p.lon])>0.5) clean.push(p); });
+    if(clean.length<2) throw new Error('לא נמצאו נקודות מסלול בקובץ');
+    const hasEle = clean.every(p=>isFinite(p.ele));
+    state.pts=[]; refreshMarkers();
+    state.gpx={ pts:clean, hasEle };
+    const geom=clean.map(p=>[p.lat,p.lon]); setLine(geom); map.fitBounds(L.latLngBounds(geom).pad(0.1));
+    const o=$('dem').querySelector('option[value=gpx]'); o.disabled=!hasEle; if(hasEle) $('dem').value='gpx';
+    status(`נטען ${f.name}: ${clean.length} נקודות, ${fmtKm(pathLen(geom))}. ${hasEle?'לקובץ יש נתוני גובה, והם נבחרו כמקור.':'אין בקובץ נתוני גובה, ייעשה שימוש במודל הגובה.'}`);
+  }catch(e){ status('קריאת קובץ ה־GPX נכשלה: '+e.message, true); }
+};
+
+/* ---------- search (Nominatim) ---------- */
+async function search(){
+  const q = $('q').value.trim(); if(!q) return;
+  $('results').innerHTML = '<span class="pts">מחפש…</span>';
+  try{
+    const c = state.me || [map.getCenter().lat, map.getCenter().lng];
+    const vb = `&viewbox=${(c[1]-0.6).toFixed(4)},${(c[0]+0.6).toFixed(4)},${(c[1]+0.6).toFixed(4)},${(c[0]-0.6).toFixed(4)}`;
+    const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=6&accept-language=he'+vb+'&q='+encodeURIComponent(q));
+    const j = await r.json();
+    $('results').innerHTML = '';
+    if(!j.length){ $('results').innerHTML='<span class="pts">לא נמצאו תוצאות</span>'; return; }
+    j.forEach(it=>{
+      const b=document.createElement('button'); b.textContent=it.display_name;
+      b.onclick=()=>{ if(it.boundingbox){const bb=it.boundingbox.map(Number); map.fitBounds([[bb[0],bb[2]],[bb[1],bb[3]]]);} else map.setView([+it.lat,+it.lon],14); };
+      $('results').appendChild(b);
+    });
+  }catch(e){ $('results').innerHTML='<span class="pts">החיפוש נכשל: '+e.message+'</span>'; }
+}
+$('qbtn').onclick = search;
+$('q').addEventListener('keydown', e=>{ if(e.key==='Enter') search(); });
+
+$('sample').onclick = async () => {
+  leaveGpx(); $('snap').value='car';
+  state.pts = [[31.8187,34.9970],[31.8075,35.0610],[31.8000,35.1300]];
+  refreshMarkers(); map.fitBounds(L.latLngBounds(state.pts).pad(0.3));
+  await previewRoute();
+  if(state.geom) compute();
+};
+
+/* ======================= resampling ======================= */
+function resample(geom, step){
+  const cum=[0]; for(let i=1;i<geom.length;i++) cum.push(cum[i-1]+hav(geom[i-1],geom[i]));
+  const total = cum[cum.length-1];
+  const n = Math.max(2, Math.ceil(total/step)+1);
+  const out=[]; let j=0;
+  for(let k=0;k<n;k++){
+    const d = Math.min(total, k*total/(n-1));
+    while(j<cum.length-2 && cum[j+1]<d) j++;
+    const seg = cum[j+1]-cum[j] || 1, t=(d-cum[j])/seg;
+    out.push({lat:geom[j][0]+(geom[j+1][0]-geom[j][0])*t, lon:geom[j][1]+(geom[j+1][1]-geom[j][1])*t, d, j, t});
+  }
+  return out;
+}
+
+/* ======================= elevation sources (real data only) ======================= */
+async function elevOpenMeteo(pts, onProg){
+  const out = new Array(pts.length);
+  for(let i=0;i<pts.length;i+=100){
+    const chunk = pts.slice(i,i+100);
+    const url = 'https://api.open-meteo.com/v1/elevation?latitude='+chunk.map(p=>p.lat.toFixed(6)).join(',')+'&longitude='+chunk.map(p=>p.lon.toFixed(6)).join(',');
+    let r, tries=0;
+    while(true){ r = await fetch(url); if(r.status===429 && tries<4){ tries++; await sleep(1500*tries); continue; } break; }
+    if(!r.ok) throw new Error('Open-Meteo החזיר שגיאה '+r.status);
+    const j = await r.json();
+    if(!j.elevation || j.elevation.length!==chunk.length) throw new Error('תשובה חלקית מ־Open-Meteo');
+    j.elevation.forEach((e,k)=>{ if(e==null || !isFinite(e)) throw new Error('ערך גובה חסר בנקודה '+(i+k)); out[i+k]=e; });
+    onProg && onProg(Math.min(1,(i+100)/pts.length));
+    await sleep(120);
+  }
+  return out;
+}
+async function elevTerrarium(pts, onProg){
+  const TS=256;
+  const proj = (lat,lon,z)=>{ const n=2**z*TS, s=Math.sin(toRad(lat)); return [ (lon+180)/360*n, (0.5-Math.log((1+s)/(1-s))/(4*Math.PI))*n ]; };
+  let z=15, keys;
+  const tileSet = zz => { const set=new Set(); pts.forEach(p=>{ const [x,y]=proj(p.lat,p.lon,zz);
+      const x0=Math.floor(x-0.5), y0=Math.floor(y-0.5);
+      for(const xx of [x0,x0+1]) for(const yy of [y0,y0+1]) set.add(zz+'/'+Math.floor(xx/TS)+'/'+Math.floor(yy/TS)); }); return set; };
+  while(true){ keys=tileSet(z); if(keys.size<=350 || z<=11) break; z--; }
+  const tiles = new Map(); let done=0;
+  const cv = document.createElement('canvas'); cv.width=cv.height=TS; const cx=cv.getContext('2d',{willReadFrequently:true});
+  const list=[...keys];
+  const worker = async () => {
+    while(list.length){
+      const k=list.pop();
+      const r = await fetch('https://s3.amazonaws.com/elevation-tiles-prod/terrarium/'+k+'.png');
+      if(!r.ok) throw new Error('אריח גובה '+k+' לא נטען ('+r.status+')');
+      const bmp = await createImageBitmap(await r.blob());
+      cx.clearRect(0,0,TS,TS); cx.drawImage(bmp,0,0);
+      const d = cx.getImageData(0,0,TS,TS).data, e = new Float32Array(TS*TS);
+      for(let i=0;i<TS*TS;i++) e[i]=(d[i*4]*256 + d[i*4+1] + d[i*4+2]/256) - 32768;
+      tiles.set(k,e); done++; onProg && onProg(done/keys.size);
+    }
+  };
+  await Promise.all([worker(),worker(),worker(),worker(),worker(),worker()]);
+  const px = (gx,gy)=>{ const tx=Math.floor(gx/TS), ty=Math.floor(gy/TS); const t=tiles.get(z+'/'+tx+'/'+ty);
+    if(!t) throw new Error('חסר אריח גובה'); return t[(gy-ty*TS)*TS + (gx-tx*TS)]; };
+  const res = pts.map(p=>{
+    const [x,y]=proj(p.lat,p.lon,z); const fx=x-0.5, fy=y-0.5, x0=Math.floor(fx), y0=Math.floor(fy), ax=fx-x0, ay=fy-y0;
+    const v = px(x0,y0)*(1-ax)*(1-ay)+px(x0+1,y0)*ax*(1-ay)+px(x0,y0+1)*(1-ax)*ay+px(x0+1,y0+1)*ax*ay;
+    if(!isFinite(v) || v<-1000) throw new Error('ערך גובה לא תקין מהאריחים');
+    return v;
+  });
+  res.label='AWS Terrain Tiles (SRTM), זום '+z; return res;
+}
+// Copernicus GLO-30 via the OpenTopography global DEM API (GeoTIFF, needs a free key)
+async function elevCop30(pts, key, onProg){
+  if(!key) throw new Error('חסר מפתח API של OpenTopography. הדביקו אותו בשדה שמתחת לבחירת המודל.');
+  if(typeof GeoTIFF==='undefined') await loadScript('https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js');
+  if(typeof GeoTIFF==='undefined') throw new Error('ספריית GeoTIFF לא נטענה');
+  const boxes=[]; let cur=null;
+  pts.forEach((p,i)=>{
+    if(cur){ const s=Math.min(cur.s,p.lat), n=Math.max(cur.n,p.lat), w=Math.min(cur.w,p.lon), e=Math.max(cur.e,p.lon);
+      if(n-s<=0.05 && e-w<=0.05){ Object.assign(cur,{s,n,w,e}); cur.idx.push(i); return; } boxes.push(cur); }
+    cur={s:p.lat,n:p.lat,w:p.lon,e:p.lon,idx:[i]};
+  }); boxes.push(cur);
+  const out=new Array(pts.length), pad=0.003;
+  for(let b=0;b<boxes.length;b++){
+    const B=boxes[b];
+    const url=`https://portal.opentopography.org/API/globaldem?demtype=COP30&south=${(B.s-pad).toFixed(5)}&north=${(B.n+pad).toFixed(5)}&west=${(B.w-pad).toFixed(5)}&east=${(B.e+pad).toFixed(5)}&outputFormat=GTiff&API_Key=${encodeURIComponent(key)}`;
+    let r;
+    try{ r=await fetch(url); }catch(e){ throw new Error('אין גישה לשרת OpenTopography מהדפדפן ('+e.message+'). ייתכן שהשרת חוסם בקשות מדפדפן; נסו מקור אחר.'); }
+    if(!r.ok){ const t=(await r.text()).replace(/<[^>]+>/g,' ').trim().slice(0,160); throw new Error('OpenTopography החזיר '+r.status+(t?': '+t:'')); }
+    const tiff=await GeoTIFF.fromArrayBuffer(await r.arrayBuffer()), img=await tiff.getImage();
+    const [ox,oy]=img.getOrigin(), [rx,ry]=img.getResolution(), W=img.getWidth(), H=img.getHeight();
+    const ras=(await img.readRasters())[0], nod=img.getGDALNoData();
+    const at=(x,y)=>{ x=Math.max(0,Math.min(W-1,x)); y=Math.max(0,Math.min(H-1,y)); const v=ras[y*W+x]; if(nod!=null && v===nod) throw new Error('אין נתון גובה בחלק מהמסלול'); return v; };
+    B.idx.forEach(i=>{
+      const fx=(pts[i].lon-ox)/rx-0.5, fy=(pts[i].lat-oy)/ry-0.5, x0=Math.floor(fx), y0=Math.floor(fy), ax=fx-x0, ay=fy-y0;
+      const v=at(x0,y0)*(1-ax)*(1-ay)+at(x0+1,y0)*ax*(1-ay)+at(x0,y0+1)*(1-ax)*ay+at(x0+1,y0+1)*ax*ay;
+      if(!isFinite(v) || v<-1000) throw new Error('ערך גובה לא תקין מ־GLO‑30'); out[i]=v;
+    });
+    onProg && onProg((b+1)/boxes.length);
+    await sleep(250);
+  }
+  out.label='Copernicus GLO‑30 (OpenTopography)'; return out;
+}
+// recorded GPX: linear interpolation between the recorded points along the track
+function elevGpx(pts){
+  const g=state.gpx.pts; const cum=[0]; for(let i=1;i<g.length;i++) cum.push(cum[i-1]+hav([g[i-1].lat,g[i-1].lon],[g[i].lat,g[i].lon]));
+  let j=0; const out=pts.map(p=>{ while(j<cum.length-2 && cum[j+1]<p.d) j++; const t=(p.d-cum[j])/((cum[j+1]-cum[j])||1); return g[j].ele+(g[j+1].ele-g[j].ele)*Math.max(0,Math.min(1,t)); });
+  out.label='הקלטת GPX'; return out;
+}
+$('dem').onchange=()=>{ $('keyRow').hidden=$('dem').value!=='cop30'; };
+$('otKey').value=store.get('route3d.otkey')||'';
+$('otKey').addEventListener('change',()=>store.set('route3d.otkey',$('otKey').value.trim()));
+
+/* ======================= OpenStreetMap road attributes (bridges, tunnels, width, lanes, maxspeed) ======================= */
+async function overpass(q){
+  const eps=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
+  let last;
+  for(const u of eps){
+    try{ const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(q)});
+      if(!r.ok) throw new Error('Overpass '+r.status); return await r.json(); }catch(e){ last=e; }
+  }
+  throw last;
+}
+async function fetchRoadInfo(pts, onProg){
+  const thin=[]; let lastD=-1e9;
+  pts.forEach((p,i)=>{ if(p.d-lastD>=40 || i===pts.length-1){ thin.push(p); lastD=p.d; } });
+  const ways=new Map(), CH=300;
+  for(let i=0;i<thin.length;i+=CH){
+    const chunk=thin.slice(Math.max(0,i-1), i+CH);
+    const coords=chunk.map(p=>p.lat.toFixed(6)+','+p.lon.toFixed(6)).join(',');
+    const j=await overpass(`[out:json][timeout:90];way(around:18,${coords})[highway];out tags geom;`);
+    (j.elements||[]).forEach(w=>{ if(w.type==='way' && w.geometry) ways.set(w.id,w); });
+    onProg && onProg(Math.min(1,(i+CH)/thin.length));
+  }
+  return [...ways.values()];
+}
+function matchRoadInfo(pts, ways){
+  const lat0=pts[0].lat, lon0=pts[0].lon, kx=Math.cos(toRad(lat0))*111320, ky=110540, C=40;
+  const xy=(lat,lon)=>[(lon-lon0)*kx,(lat-lat0)*ky];
+  const cells=new Map(), segs=[];
+  ways.forEach(w=>{ const g=w.geometry;
+    for(let k=1;k<g.length;k++){ const a=xy(g[k-1].lat,g[k-1].lon), b=xy(g[k].lat,g[k].lon); const id=segs.length; segs.push({a,b,tags:w.tags||{}});
+      const x0=Math.floor((Math.min(a[0],b[0])-15)/C), x1=Math.floor((Math.max(a[0],b[0])+15)/C), y0=Math.floor((Math.min(a[1],b[1])-15)/C), y1=Math.floor((Math.max(a[1],b[1])+15)/C);
+      for(let x=x0;x<=x1;x++) for(let y=y0;y<=y1;y++){ const key=x+','+y; if(!cells.has(key)) cells.set(key,[]); cells.get(key).push(id); } } });
+  const P=pts.map(p=>xy(p.lat,p.lon)); let matched=0;
+  pts.forEach((p,i)=>{
+    const a=P[Math.max(0,i-1)], b=P[Math.min(P.length-1,i+1)]; let tx=b[0]-a[0], ty=b[1]-a[1]; const tl=Math.hypot(tx,ty)||1; tx/=tl; ty/=tl;
+    const [x,y]=P[i], list=cells.get(Math.floor(x/C)+','+Math.floor(y/C))||[]; let best=null, bs=1e9;
+    for(const id of list){ const s=segs[id]; const dx=s.b[0]-s.a[0], dy=s.b[1]-s.a[1], L2=dx*dx+dy*dy||1e-9;
+      const u=Math.max(0,Math.min(1,((x-s.a[0])*dx+(y-s.a[1])*dy)/L2)); const dist=Math.hypot(s.a[0]+u*dx-x, s.a[1]+u*dy-y);
+      const align=Math.abs(tx*dx+ty*dy)/Math.sqrt(L2);
+      if(dist<=12 && align>=0.8){ const sc=dist+(1-align)*20; if(sc<bs){ bs=sc; best=s; } } }
+    p.osm=best?best.tags:null; if(best) matched++;
+  });
+  return matched/pts.length;
+}
+const isBridge = t => !!(t && t.bridge && t.bridge!=='no');
+const isTunnel = t => !!(t && t.tunnel && !['no','building_passage'].includes(t.tunnel));
+// replace ground elevation on bridges/tunnels by a straight grade between the two ends (deck/tube follows a smooth line)
+function applyStructureFix(pts){
+  const n=pts.length, kind=pts.map(p=>isBridge(p.osm)?'bridge':isTunnel(p.osm)?'tunnel':null);
+  for(let i=1;i<n-1;i++){ if(!kind[i]){ let a=i-1, b=i+1; while(b<n-1 && !kind[b] && pts[b].d-pts[i].d<30) b++; if(kind[a] && kind[a]===kind[b] && pts[b].d-pts[a].d<=40) for(let k=i;k<b;k++) kind[k]=kind[a]; } }
+  const runs=[]; let i=0;
+  while(i<n){ if(!kind[i]){ i++; continue; } let j=i; while(j+1<n && kind[j+1]===kind[i]) j++; runs.push({a:i,b:j,kind:kind[i]}); i=j+1; }
+  runs.forEach(r=>{
+    const A=r.a-1, B=r.b+1, eA = A>=0 ? pts[A].e : (B<n ? pts[B].e : pts[r.a].e), eB = B<n ? pts[B].e : eA;
+    const dA = A>=0 ? pts[A].d : pts[r.a].d, dB = B<n ? pts[B].d : pts[r.b].d;
+    for(let k=r.a;k<=r.b;k++){ const t=(pts[k].d-dA)/((dB-dA)||1); pts[k].e=eA+(eB-eA)*t; pts[k].fix=r.kind; }
+  });
+  return runs;
+}
+function roadWidth(t){
+  if(!t) return {w:null, src:null};
+  const w=parseFloat(String(t.width||'').replace(',','.')); if(isFinite(w) && w>1.5 && w<60) return {w, src:'width'};
+  const ln=parseInt(t.lanes,10); if(isFinite(ln) && ln>0 && ln<12) return {w:ln*3.5, src:'lanes'};
+  return {w:null, src:null};
+}
+const isOneway = t => !!t && (['yes','1','true','-1'].includes(t.oneway) || t.junction==='roundabout' || (t.highway==='motorway' && t.oneway!=='no'));
+function maxspeedMs(t){
+  if(!t || !t.maxspeed) return 0; const m=String(t.maxspeed).match(/^(\d+(?:\.\d+)?)\s*(mph)?$/i);
+  if(!m) return 0; return parseFloat(m[1])*(m[2]?1.609344:1)/3.6;
+}
+
+/* ======================= compute: route + elevation ======================= */
+function computeGrades(p, win){
+  const n=p.length;
+  for(let i=0;i<n;i++){
+    if(win<=0){ const a=Math.max(0,i-1), b=Math.min(n-1,i+1); p[i].g=(p[b].e-p[a].e)/((p[b].d-p[a].d)||1)*100; continue; }
+    let a=i,b=i;
+    while(a>0 && p[i].d-p[a].d < win/2) a--;
+    while(b<n-1 && p[b].d-p[i].d < win/2) b++;
+    p[i].g = (p[b].e-p[a].e)/((p[b].d-p[a].d)||1)*100;
+  }
+}
+let computing=false;
+async function compute(){
+  if(computing) return;
+  if(!state.geom || state.geom.length<2){ status('צריך לפחות שתי נקודות על המפה, או קובץ GPX.', true); return; }
+  computing=true; $('go').disabled=true;
+  try{
+    const geom=state.geom.map(p=>p.slice()), total=pathLen(geom), src=$('dem').value;
+    const step = src==='openmeteo' ? Math.max(30, total/1500) : Math.max(10, total/3000);
+    const pts = resample(geom, step);
+    status(`שולף גבהים עבור ${pts.length} נקודות (כל ${step.toFixed(0)} מ׳)…`);
+    const prog = f => status(`שולף גבהים אמיתיים… ${Math.round(f*100)}%`);
+    let elev;
+    if(src==='openmeteo'){ elev=await elevOpenMeteo(pts,prog); elev.label='Copernicus GLO‑90 (Open‑Meteo)'; }
+    else if(src==='cop30'){ store.set('route3d.otkey',$('otKey').value.trim()); elev=await elevCop30(pts,$('otKey').value.trim(),prog); }
+    else if(src==='gpx'){ if(!state.gpx||!state.gpx.hasEle) throw new Error('לא נטען קובץ GPX עם גבהים'); elev=elevGpx(pts); }
+    else elev=await elevTerrarium(pts,prog);
+    pts.forEach((p,i)=>{ p.e=elev[i]; p.eDem=elev[i]; p.fix=null; p.osm=null; });
+    let osmNote='';
+    {
+      try{
+        status('שולף נתוני דרך מ־OpenStreetMap (גשרים, מנהרות, רוחב, מהירות מותרת)…');
+        const ways=await fetchRoadInfo(pts, f=>status(`שולף נתוני דרך מ־OpenStreetMap… ${Math.round(f*100)}%`));
+        const frac=matchRoadInfo(pts, ways);
+        osmNote=` נתוני OSM הותאמו ל־${Math.round(frac*100)}% מהמסלול.`;
+        if($('osmFix').checked && src!=='gpx'){
+          const runs=applyStructureFix(pts);
+          const nb=runs.filter(r=>r.kind==='bridge').length, nt=runs.length-nb;
+          const len=runs.reduce((s,r)=>s+pts[r.b].d-pts[r.a].d+step,0);
+          if(runs.length) osmNote+=` תוקנו ${nb} גשרים ו־${nt} מנהרות (${fmtKm(len)}).`;
+        }
+      }catch(e){ osmNote=' נתוני OSM לא נשלפו ('+e.message+'), לכן לא בוצע תיקון גשרים ומנהרות.'; }
+    }
+    computeGrades(pts, +$('win').value);
+    state.prof = { pts, src, step, label: elev.label, geom };
+    state.dyn=null; clearDynLayers(); if(ride.active) exitRide();
+    showStats(); setTab('elev'); three.viewSet=false; build3D(); enableExports(true);
+    $('goDyn').disabled=false; $('tabSpd').disabled=true;
+    status(`הושלם. ${pts.length} נקודות גובה מתוך ${elev.label}.`+osmNote);
+    if(state.wantDyn) computeDyn();
+  }catch(err){
+    state.prof=null; enableExports(false);
+    status('לא ניתן היה לשלוף נתוני גובה אמיתיים: '+err.message+'\nלא מוצג מסלול כדי לא להציג נתונים לא אמיתיים. נסו מקור גובה אחר.', true);
+  }finally{ computing=false; $('go').disabled=false; }
+}
+$('go').onclick = compute;
+$('win').oninput = () => { $('winv').textContent=$('win').value; if(state.prof){ computeGrades(state.prof.pts, +$('win').value); showStats(); drawProfile(); build3D(); } };
+
+function showStats(){
+  const p=state.prof.pts; let up=0,dn=0,mn=1e9,mx=-1e9,gu=-1e9,gd=1e9;
+  for(let i=0;i<p.length;i++){
+    mn=Math.min(mn,p[i].e); mx=Math.max(mx,p[i].e); gu=Math.max(gu,p[i].g); gd=Math.min(gd,p[i].g);
+    if(i){ const dz=p[i].e-p[i-1].e; if(dz>0) up+=dz; else dn-=dz; }
+  }
+  $('sLen').textContent=fmtKm(p[p.length-1].d);
+  $('sRange').textContent=`${Math.round(mn)}–${Math.round(mx)} m`;
+  $('sUp').textContent=`+${Math.round(up)} m`;
+  $('sDn').textContent=`−${Math.round(dn)} m`;
+  $('sMaxU').textContent=(gu>0?'+':'')+gu.toFixed(1)+'%';
+  $('sMaxD').textContent=gd.toFixed(1)+'%';
+}
+
+/* ======================= motorcycle dynamics ======================= */
+function readParams(){
+  const num=id=>{ const v=parseFloat($(id).value); if(!isFinite(v)) throw new Error('ערך לא תקין בשדה: '+(($(id).closest('label')||{}).textContent||id).trim()); return v; };
+  const p={
+    mass:num('mMass')+num('mRider'), powerW:num('mPow')*1000, eta:num('aEta'),
+    wheelbase:num('mWb')/1000, cogH:num('aCog'), frontFrac:num('aFront'),
+    CdA:num('aCdA'), rho:num('aRho'), Crr:num('aCrr'), mu:num('mMu'), leanMax:num('aLean'),
+    bikeW:num('bikeW'), margin:num('margin'),
+    method:$('method').value, tanhC:num('tC'), sigmaLook:num('tLook'), sigmaKappa:num('sK'), sigmaCenter:5,
+    fromRest:$('fromRest').checked, stopEnd:$('stopEnd').checked, useLegal:$('legal').checked, vCap:num('vCap')/3.6,
+  };
+  if(p.mass<=0||p.powerW<=0||p.mu<=0||p.cogH<=0) throw new Error('הספק, משקל, μ וגובה מרכז הכובד חייבים להיות חיוביים');
+  return p;
+}
+const tick=()=>new Promise(r=>setTimeout(r,0));
+// road corridor per grid point: |n| ≤ (w_road − w_bike)/2 − margin, or own (right-hand) lane only
+function buildInput(p){
+  const P=state.prof.pts, total=P[P.length-1].d;
+  const grid=resample(state.prof.geom, Math.max(2, total/15000)), N=grid.length, ds=total/(N-1);
+  const lat0=P[0].lat, lon0=P[0].lon, kx=Math.cos(toRad(lat0))*111320, ky=110540;
+  const X=new Float64Array(N), Y=new Float64Array(N), E=new Float64Array(N), lo=new Float64Array(N), hi=new Float64Array(N), legal=new Float64Array(N), W=new Float64Array(N);
+  const mode=$('corr').value, half=p.bikeW/2+p.margin, defW=+$('defW').value;
+  let j=0, osmW=0;
+  for(let i=0;i<N;i++){
+    X[i]=(grid[i].lon-lon0)*kx; Y[i]=(grid[i].lat-lat0)*ky;
+    while(j<P.length-2 && P[j+1].d<grid[i].d) j++;
+    const t=(grid[i].d-P[j].d)/((P[j+1].d-P[j].d)||1); E[i]=P[j].e+(P[j+1].e-P[j].e)*Math.max(0,Math.min(1,t));
+    const tags=(t<0.5?P[j]:P[j+1]).osm, rw=roadWidth(tags); if(rw.w) osmW++;
+    W[i]=rw.w||defW; legal[i]=maxspeedMs(tags);
+    if(isOneway(tags)||mode==='full'){ lo[i]=-W[i]/2+half; hi[i]=W[i]/2-half; } else { lo[i]=-W[i]/2+half; hi[i]=-half; }
+    if(hi[i]-lo[i]<0.1){ const c=(lo[i]+hi[i])/2; lo[i]=c-0.05; hi[i]=c+0.05; }
+  }
+  const G=MotoSim.gauss, sig=15/ds;
+  return {grid, inp:{X,Y,E,lo:G(lo,sig),hi:G(hi,sig),legal,ds}, legal, lat0, lon0, kx, ky, W:G(W,sig), ds, osmWidth:osmW/N};
+}
+let dynRun=0, stopOptFlag=false;
+async function computeDyn(){
+  if(!state.prof){ dynStatus('קודם חשבו מסלול תלת־ממדי.', true); return; }
+  let p; try{ p=readParams(); }catch(e){ dynStatus(e.message, true); return; }
+  const my=++dynRun; stopOptFlag=false; state.wantDyn=true;
+  const done=()=>{ $('optProg').hidden=true; $('stopOpt').hidden=true; };
+  try{
+    dynStatus('מכין את גאומטריית הדרך…'); await tick(); if(my!==dynRun) return;
+    const B=buildInput(p), geo=MotoSim.prepare(B.inp,p);
+    dynStatus('מחשב קווי ייחוס: מרכז התחום, נוסחת tanh, עקמומיות מינימלית, רדיוס מרבי…'); await tick(); if(my!==dynRun) return;
+    const cands=MotoSim.candidates(geo,B.inp,p); if(my!==dynRun) return;
+    let n, optInfo=null;
+    if(p.method==='optimal'){
+      const start=Object.entries(cands).sort((a,b)=>a[1].time-b[1].time)[0];
+      const opt=MotoSim.createOptimizer(geo,start[1].n,B.inp,p), t0=performance.now();
+      $('optProg').hidden=false; $('stopOpt').hidden=false;
+      while(true){
+        const r=opt.step(45);
+        $('optBar').style.width=(r.frac*100).toFixed(1)+'%';
+        dynStatus(`מחפש את הקו המהיר ביותר… ${Math.round(r.frac*100)}%\nנקודת התחלה: ${LINE_NAMES[start[0]]} ${fmtTime(start[1].time,1)} · כרגע ${fmtTime(r.T,1)} (שיפור ${(start[1].time-r.T).toFixed(2)} ש׳)`);
+        await tick(); if(my!==dynRun){ done(); return; }
+        if(r.done||stopOptFlag) break;
+      }
+      done();
+      n=Float64Array.from(opt.n);
+      optInfo=Object.assign({start:start[0], startT:start[1].time, ms:performance.now()-t0, stopped:stopOptFlag}, opt.stats);
+    } else n=cands[p.method].n;
+    const sim=MotoSim.evalLine(geo,n,B.inp,p); sim.lineName=p.method;
+    const cmp=MotoSim.evalLine(geo,cands[$('cmp').value].n,B.inp,p); cmp.lineName=$('cmp').value;
+    state.dyn=Object.assign(B,{g:B.grid, geo, sim, cmp, cands, p, optInfo, check:MotoSim.checkConstraints(sim,B.inp)});
+    showDyn();
+  }catch(e){ done(); dynStatus('החישוב נכשל: '+e.message, true); }
+}
+$('goDyn').onclick=computeDyn;
+$('stopOpt').onclick=()=>{ stopOptFlag=true; };
+const LINE_NAMES={'optimal':'זמן מינימלי (אופטימיזציה)', 'mincurv':'עקמומיות מינימלית', 'minmax':'רדיוס מרבי', 'tanh':'נוסחת tanh', 'centre':'מרכז התחום'};
+const LIMIT_NAMES={corner:'אחיזה / הטייה בפנייה', crest:'גבול ניתוק בפסגה', legal:'מהירות מותרת (OSM)', cap:'תקרת מהירות', brake:'בלימה לקראת פנייה', accel:'האצה (מנוע / אחיזה)', none:'—'};
+function cornerApexes(sim){
+  const out=[]; let i=0;
+  while(i<sim.N){ if(sim.limit[i]!=='corner'){ i++; continue; } let j=i, m=i; while(j+1<sim.N && sim.limit[j+1]==='corner'){ j++; if(sim.v[j]<sim.v[m]) m=j; } out.push(m); i=j+1; }
+  return out;
+}
+function showDyn(){
+  const {sim,cmp,g,cands,check,optInfo}=state.dyn, N=sim.N, total=g[N-1].d;
+  let vmax=0,lmax=0; for(let i=0;i<N;i++){ if(sim.v[i]>vmax) vmax=sim.v[i]; if(sim.lean[i]>lmax) lmax=sim.lean[i]; }
+  state.dyn.apex=cornerApexes(sim);
+  $('dynStats').hidden=false; $('colorRow').hidden=false; $('gradLegend').hidden=false;
+  $('dTime').textContent=fmtTime(sim.time,1);
+  $('dAvg').textContent=(total/sim.time*3.6).toFixed(0)+' km/h';
+  $('dMax').textContent=(vmax*3.6).toFixed(0)+' km/h';
+  $('dLean').textContent=lmax.toFixed(1)+'°';
+  $('dCorners').textContent=state.dyn.apex.length;
+  $('dLine').textContent=LINE_NAMES[sim.lineName]||sim.lineName;
+  const ok=(c,t)=>`<span class="${c?'ok':'bad'}">${c?'✓':'✗'}</span> ${t}`;
+  $('ckOut').hidden=false;
+  $('ckOut').innerHTML='אילוצים על הקו שנבחר:<br>'
+    + ok(check.maxOut<0.01,'בתוך גבולות הכביש (כולל רוחב האופנוע)')+'<br>'
+    + ok(check.maxLean<=check.leanLimit+0.2,`הטייה מרבית <b>${check.maxLean.toFixed(1)}°</b> מתוך <b>${check.leanLimit.toFixed(1)}°</b> מותרות`)+'<br>'
+    + ok(check.maxGrip<=1.02,`ניצול מעגל החיכוך עד <b>${Math.round(check.maxGrip*100)}%</b>`);
+  renderCmpTable();
+  let msg=`הושלם. רוחב הכביש נלקח מ־OSM ב־${Math.round(state.dyn.osmWidth*100)}% מהמסלול, בשאר ${$('defW').value} מ׳.`;
+  if(optInfo) msg+=`\nהאופטימיזציה התחילה מ"${LINE_NAMES[optInfo.start]}" (${fmtTime(optInfo.startT,1)}) וקיצרה את הזמן ב־${(optInfo.startT-sim.time).toFixed(2)} ש׳`
+    + ` · ${optInfo.accepted.toLocaleString()} שינויים מתוך ${optInfo.trials.toLocaleString()} ניסיונות · ${(optInfo.ms/1000).toFixed(1)} ש׳ חישוב`+(optInfo.stopped?' (נעצרה ידנית)':'');
+  dynStatus(msg);
+  ['tabSpd','tabCmp'].forEach(id=>$(id).disabled=false); $('xLine').disabled=false;
+  updateGradLegend(); drawDynOnMap(); build3D(); setTab(state.tab==='elev'?'speed':state.tab);
+}
+function renderCmpTable(){
+  const {sim,cmp,cands}=state.dyn;
+  const rows=Object.keys(cands).map(k=>({k, t:k===sim.lineName?sim.time:cands[k].time}));
+  if(sim.lineName==='optimal') rows.push({k:'optimal', t:sim.time});
+  rows.sort((a,b)=>a.t-b.t); const best=rows[0].t;
+  $('cmpTable').hidden=false;
+  $('cmpTable').innerHTML='<tr><th>קו</th><th>זמן</th><th>פער מהמהיר</th></tr>'+rows.map(r=>
+    `<tr class="${r.t===best?'best':''}"><td>${LINE_NAMES[r.k]||r.k}${r.k===sim.lineName?'<span class="tagsel">מוצג</span>':''}${r.k===cmp.lineName?'<span class="tagcmp">השוואה</span>':''}</td>`
+    +`<td class="n">${fmtTime(r.t,2)}</td><td class="n">${r.t===best?'—':'+'+(r.t-best).toFixed(2)+' s'}</td></tr>`).join('');
+}
+$('cmp').onchange=()=>{
+  if(!state.dyn) return; const d=state.dyn;
+  d.cmp=MotoSim.evalLine(d.geo,d.cands[$('cmp').value].n,d.inp,d.p); d.cmp.lineName=$('cmp').value;
+  renderCmpTable(); drawDynOnMap(); build3D(); drawProfile();
+};
+$('showCmp').onchange=()=>{ if(!state.dyn) return; drawDynOnMap(); build3D(); drawProfile(); };
+function dynColors(){
+  const {sim,p}=state.dyn, mode=$('colorBy').value, N=sim.N, out=new Array(N);
+  let a=0,b=1, arr;
+  if(mode==='v'){ arr=sim.v; a=Infinity; b=0; for(let i=0;i<N;i++){ if(arr[i]<a) a=arr[i]; if(arr[i]>b) b=arr[i]; } }
+  else if(mode==='lean'){ arr=sim.lean; a=0; b=Math.max(10,Math.atan(sim.latCoef)*180/Math.PI); }
+  else { arr=sim.grip; a=0; b=1; }
+  for(let i=0;i<N;i++) out[i]=Math.round(Math.max(0,Math.min(1,(arr[i]-a)/((b-a)||1)))*11)/11;
+  return {t:out, a, b, mode};
+}
+function updateGradLegend(){
+  const c=dynColors();
+  const f = c.mode==='v' ? x=>(x*3.6).toFixed(0)+' km/h' : c.mode==='lean' ? x=>x.toFixed(0)+'°' : x=>Math.round(x*100)+'%';
+  $('gMin').textContent=f(c.a); $('gMax').textContent=f(c.b);
+}
+$('colorBy').onchange=()=>{ if(!state.dyn) return; updateGradLegend(); drawDynOnMap(); build3D(); drawProfile(); };
+['mPow','mMass','mWb','mRider','mMu','mSurf','moto','corr','method','aLean','aCdA','aCog','aFront','aEta','aCrr','aRho','bikeW','margin','defW','sK','tC','tLook','vCap','legal','fromRest','stopEnd']
+  .forEach(id=>$(id).addEventListener('change',()=>{ if(state.dyn) computeDyn(); }));
+
+let dynLayer=null;
+function clearDynLayers(){ if(dynLayer){ map.removeLayer(dynLayer); dynLayer=null; }
+  ['dynStats','colorRow','gradLegend','ckOut','cmpTable','optProg','stopOpt'].forEach(id=>$(id).hidden=true);
+  ['tabSpd','tabCmp'].forEach(id=>$(id).disabled=true); dynStatus(''); $('xLine').disabled=true; }
+function lineLatLon(r,i){ const d=state.dyn; return [d.lat0+r.Ry[i]/d.ky, d.lon0+r.Rx[i]/d.kx]; }
+function rlLatLon(i){ return lineLatLon(state.dyn.sim,i); }
+function drawDynOnMap(){
+  if(dynLayer){ map.removeLayer(dynLayer); dynLayer=null; }
+  if(!state.dyn) return;
+  const {sim,cmp}=state.dyn, N=sim.N, col=dynColors().t, grp=L.layerGroup(), step=Math.max(1,Math.floor(N/8000));
+  if($('showCmp').checked && cmp.lineName!==sim.lineName){
+    const ll=[]; for(let i=0;i<N;i+=step) ll.push(lineLatLon(cmp,i));
+    grp.addLayer(L.polyline(ll,{color:css('--cmp'),weight:2.5,opacity:.9,dashArray:'6 6',renderer:lineRenderer,interactive:false}));
+  }
+  let seg=[], cur=null;
+  for(let i=0;i<N;i+=step){ const ll=lineLatLon(sim,i), c=col[i];
+    if(cur!==null && c!==cur){ seg.push(ll); grp.addLayer(L.polyline(seg,{color:rampColor(cur),weight:4,opacity:.95,renderer:lineRenderer,interactive:false})); seg=[]; }
+    cur=c; seg.push(ll); }
+  if(seg.length>1) grp.addLayer(L.polyline(seg,{color:rampColor(cur),weight:4,opacity:.95,renderer:lineRenderer,interactive:false}));
+  dynLayer=grp.addTo(map);
+}
+
+/* ======================= profile charts ======================= */
+const pc=$('prof'), pctx=pc.getContext('2d');
+let pGeo=null;
+function setTab(t){
+  state.tab = (t==='speed'||t==='cmp') && state.dyn ? t : 'elev';
+  $('tabElev').classList.toggle('on',state.tab==='elev'); $('tabSpd').classList.toggle('on',state.tab==='speed'); $('tabCmp').classList.toggle('on',state.tab==='cmp');
+  drawProfile();
+}
+$('tabElev').onclick=()=>setTab('elev'); $('tabSpd').onclick=()=>setTab('speed'); $('tabCmp').onclick=()=>setTab('cmp');
+function axesX(D,X,H,B0){
+  pctx.fillStyle=css('--muted'); pctx.font='11px '+css('--f-mono');
+  const dx=nice(D/6); pctx.textAlign='center';
+  for(let d=0;d<=D;d+=dx){ pctx.fillText(D>=2000?(d/1000).toFixed(dx<1000?1:0)+' km':Math.round(d)+' m', X(d), H-B0+16); }
+}
+function tooltip(txt,x,L0,R0,W){
+  pctx.font='12px '+css('--f-mono'); const tw=pctx.measureText(txt).width+14, bx=Math.min(Math.max(x-tw/2,L0),W-R0-tw);
+  pctx.fillStyle=css('--panel'); pctx.strokeStyle=css('--line'); pctx.lineWidth=1; pctx.fillRect(bx,6,tw,22); pctx.strokeRect(bx,6,tw,22);
+  pctx.fillStyle=css('--ink'); pctx.textAlign='left'; pctx.fillText(txt,bx+7,21);
+}
+function drawProfile(){
+  const dpr=window.devicePixelRatio||1, W=pc.clientWidth, H=pc.clientHeight;
+  pc.width=W*dpr; pc.height=H*dpr; pctx.setTransform(dpr,0,0,dpr,0,0); pctx.clearRect(0,0,W,H);
+  if(!state.prof){ pctx.fillStyle=css('--muted'); pctx.font='14px '+css('--f-body'); pctx.textAlign='center'; pctx.fillText('חתך הגובה יופיע כאן אחרי החישוב', W/2, H/2); pGeo=null; return; }
+  if(state.tab==='speed' && state.dyn) drawSpeed(W,H); else if(state.tab==='cmp' && state.dyn) drawCmp(W,H); else drawElev(W,H);
+}
+function drawElev(W,H){
+  const p=state.prof.pts, L0=56, R0=16, T0=40, B0=28;
+  let mn=Infinity, mx=-Infinity; p.forEach(q=>{ mn=Math.min(mn,q.e,q.eDem); mx=Math.max(mx,q.e,q.eDem); });
+  const pad=Math.max(5,(mx-mn)*0.08); mn-=pad; mx+=pad;
+  const D=p[p.length-1].d, X=d=>L0+(W-L0-R0)*d/D, Y=e=>T0+(H-T0-B0)*(1-(e-mn)/(mx-mn));
+  pGeo={L0,R0,W,D};
+  pctx.strokeStyle=css('--line'); pctx.fillStyle=css('--muted'); pctx.font='11px '+css('--f-mono'); pctx.lineWidth=1;
+  const ey=nice((mx-mn)/4); pctx.textAlign='right';
+  for(let e=Math.ceil(mn/ey)*ey;e<=mx;e+=ey){ const y=Y(e); pctx.beginPath(); pctx.moveTo(L0,y); pctx.lineTo(W-R0,y); pctx.stroke(); pctx.fillText(Math.round(e)+' m',L0-6,y+4); }
+  axesX(D,X,H,B0);
+  for(let i=1;i<p.length;i++){
+    pctx.fillStyle=p[i].fix? css('--bridge') : gradeColor(p[i].g);
+    pctx.beginPath(); pctx.moveTo(X(p[i-1].d),Y(p[i-1].e)); pctx.lineTo(X(p[i].d),Y(p[i].e));
+    pctx.lineTo(X(p[i].d),H-B0); pctx.lineTo(X(p[i-1].d),H-B0); pctx.closePath(); pctx.fill();
+  }
+  // ground elevation under bridges / above tunnels, as measured by the DEM
+  pctx.strokeStyle=css('--ink'); pctx.setLineDash([3,3]); pctx.lineWidth=1;
+  for(let i=1;i<p.length;i++) if(p[i].fix||p[i-1].fix){ pctx.beginPath(); pctx.moveTo(X(p[i-1].d),Y(p[i-1].eDem)); pctx.lineTo(X(p[i].d),Y(p[i].eDem)); pctx.stroke(); }
+  pctx.setLineDash([]);
+  pctx.strokeStyle=css('--ink'); pctx.lineWidth=1.5; pctx.beginPath();
+  p.forEach((q,i)=> i?pctx.lineTo(X(q.d),Y(q.e)):pctx.moveTo(X(q.d),Y(q.e))); pctx.stroke();
+  if(p.some(q=>q.fix)){ pctx.font='11px '+css('--f-body'); pctx.fillStyle=css('--muted'); pctx.textAlign='right'; pctx.fillText('כחול = גשר/מנהרה מתוקנים · מקווקו = גובה הקרקע במודל', W-R0, T0-8); }
+  if(state.hoverD!=null){
+    const i=idxAtDist(state.hoverD), q=p[i], x=X(q.d);
+    pctx.strokeStyle=css('--ink'); pctx.setLineDash([4,3]); pctx.beginPath(); pctx.moveTo(x,T0); pctx.lineTo(x,H-B0); pctx.stroke(); pctx.setLineDash([]);
+    pctx.fillStyle=css('--accent'); pctx.beginPath(); pctx.arc(x,Y(q.e),5,0,7); pctx.fill();
+    const fx=q.fix==='bridge'?' · bridge':q.fix==='tunnel'?' · tunnel':'';
+    tooltip(`${fmtKm(q.d)}  ·  ${q.e.toFixed(1)} m  ·  ${(q.g>0?'+':'')+q.g.toFixed(1)}%${fx}`, x, L0, R0, W);
+  }
+}
+function drawSpeed(W,H){
+  const {sim,cmp,g,legal}=state.dyn, N=sim.N, L0=56, R0=44, T0=40, B0=28, D=g[N-1].d, showC=$('showCmp').checked && cmp.lineName!==sim.lineName;
+  let vTop=0, lm=0; for(let i=0;i<N;i++){ vTop=Math.max(vTop, sim.v[i], showC?cmp.v[i]:0, legal[i]); if(sim.lean[i]>lm) lm=sim.lean[i]; }
+  vTop=vTop*3.6*1.08; const lTop=Math.max(30, Math.ceil(lm/10)*10+10);
+  const X=d=>L0+(W-L0-R0)*d/D, Y=v=>T0+(H-T0-B0)*(1-v/vTop), YL=l=>T0+(H-T0-B0)*(1-l/lTop);
+  pGeo={L0,R0,W,D};
+  pctx.strokeStyle=css('--line'); pctx.fillStyle=css('--muted'); pctx.font='11px '+css('--f-mono'); pctx.lineWidth=1;
+  const vy=nice(vTop/4); pctx.textAlign='right';
+  for(let v=0;v<=vTop;v+=vy){ const y=Y(v); pctx.beginPath(); pctx.moveTo(L0,y); pctx.lineTo(W-R0,y); pctx.stroke(); pctx.fillText(Math.round(v)+'',L0-6,y+4); }
+  pctx.textAlign='left'; pctx.fillStyle=css('--lean');
+  for(let l=0;l<=lTop;l+=10){ pctx.fillText(l+'°',W-R0+6,YL(l)+4); }
+  pctx.fillStyle=css('--muted'); pctx.textAlign='right'; pctx.fillText('km/h',L0-6,T0-10);
+  axesX(D,X,H,B0);
+  const st=Math.max(1,Math.floor(N/(W*2)));
+  pctx.strokeStyle=css('--muted'); pctx.setLineDash([5,4]); pctx.lineWidth=1.2; pctx.beginPath(); let on=false;
+  for(let i=0;i<N;i+=st){ if(legal[i]>0){ const y=Y(legal[i]*3.6); if(!on){ pctx.moveTo(X(g[i].d),y); on=true; } else pctx.lineTo(X(g[i].d),y); } else on=false; }
+  pctx.stroke(); pctx.setLineDash([]);
+  if(showC){ pctx.strokeStyle=css('--cmp'); pctx.lineWidth=1.4; pctx.beginPath(); for(let i=0;i<N;i+=st){ const x=X(g[i].d), y=Y(cmp.v[i]*3.6); i?pctx.lineTo(x,y):pctx.moveTo(x,y); } pctx.stroke(); }
+  pctx.strokeStyle=css('--lean'); pctx.globalAlpha=0.75; pctx.lineWidth=1.2; pctx.beginPath();
+  for(let i=0;i<N;i+=st){ const x=X(g[i].d), y=YL(sim.lean[i]); i?pctx.lineTo(x,y):pctx.moveTo(x,y); } pctx.stroke(); pctx.globalAlpha=1;
+  const col=dynColors().t; pctx.lineWidth=2.4;
+  for(let i=st;i<N;i+=st){ pctx.strokeStyle=rampColor(col[i]); pctx.beginPath(); pctx.moveTo(X(g[i-st].d),Y(sim.v[i-st]*3.6)); pctx.lineTo(X(g[i].d),Y(sim.v[i]*3.6)); pctx.stroke(); }
+  pctx.font='11px '+css('--f-body'); pctx.textAlign='right'; pctx.fillStyle=css('--muted');
+  pctx.fillText('צבעוני = מהירות בקו שנבחר'+(showC?' · אפור = '+LINE_NAMES[cmp.lineName]:'')+' · סגול = זווית הטייה'+(legal.some(v=>v>0)?' · מקווקו = מהירות מותרת':''), W-R0, T0-8);
+  hoverLine(X,T0,H,B0, d=>{ const i=gridIdx(d); return [Y(sim.v[i]*3.6), `${fmtKm(g[i].d)} · ${(sim.v[i]*3.6).toFixed(0)} km/h`+(showC?` (${(cmp.v[i]*3.6).toFixed(0)})`:'')+` · ${sim.lean[i].toFixed(1)}° · ${LIMIT_NAMES[sim.limit[i]]||''}`]; }, L0,R0,W);
+}
+/* cumulative time gained by the selected line against the comparison line, at the same point of the road */
+function drawCmp(W,H){
+  const {sim,cmp,g}=state.dyn, N=sim.N, L0=56, R0=16, T0=40, B0=28, D=g[N-1].d;
+  const dt=new Float64Array(N); let mn=0, mx=0; for(let i=0;i<N;i++){ dt[i]=cmp.t[i]-sim.t[i]; if(dt[i]<mn) mn=dt[i]; if(dt[i]>mx) mx=dt[i]; }
+  const pad=Math.max(0.05,(mx-mn)*0.1); const lo=mn-pad, hi=mx+pad;
+  const X=d=>L0+(W-L0-R0)*d/D, Y=v=>T0+(H-T0-B0)*(1-(v-lo)/(hi-lo));
+  pGeo={L0,R0,W,D};
+  pctx.strokeStyle=css('--line'); pctx.fillStyle=css('--muted'); pctx.font='11px '+css('--f-mono'); pctx.lineWidth=1;
+  const vy=nice((hi-lo)/4); pctx.textAlign='right';
+  for(let v=Math.ceil(lo/vy)*vy; v<=hi; v+=vy){ const y=Y(v); pctx.beginPath(); pctx.moveTo(L0,y); pctx.lineTo(W-R0,y); pctx.stroke(); pctx.fillText((v>0?'+':'')+v.toFixed(vy<1?1:0)+' s',L0-6,y+4); }
+  axesX(D,X,H,B0);
+  const st=Math.max(1,Math.floor(N/(W*2))), y0=Y(0);
+  for(const [sign,color] of [[1,'--good'],[-1,'--breach']]){
+    pctx.fillStyle=css(color); pctx.globalAlpha=0.28; pctx.beginPath(); pctx.moveTo(X(0),y0);
+    for(let i=0;i<N;i+=st) pctx.lineTo(X(g[i].d), Y(sign>0?Math.max(0,dt[i]):Math.min(0,dt[i])));
+    pctx.lineTo(X(D),y0); pctx.closePath(); pctx.fill(); pctx.globalAlpha=1;
+  }
+  pctx.strokeStyle=css('--ink'); pctx.lineWidth=1.6; pctx.beginPath();
+  for(let i=0;i<N;i+=st){ const x=X(g[i].d), y=Y(dt[i]); i?pctx.lineTo(x,y):pctx.moveTo(x,y); } pctx.stroke();
+  pctx.strokeStyle=css('--muted'); pctx.beginPath(); pctx.moveTo(L0,y0); pctx.lineTo(W-R0,y0); pctx.stroke();
+  pctx.font='11px '+css('--f-body'); pctx.textAlign='right'; pctx.fillStyle=css('--muted');
+  pctx.fillText(`הזמן שהקו "${LINE_NAMES[sim.lineName]}" מרוויח מול "${LINE_NAMES[cmp.lineName]}" עד כל נקודה בדרך · בסוף: ${(dt[N-1]>=0?'+':'')}${dt[N-1].toFixed(2)} ש׳`, W-R0, T0-8);
+  hoverLine(X,T0,H,B0, d=>{ const i=gridIdx(d); return [Y(dt[i]), `${fmtKm(g[i].d)} · ${(dt[i]>=0?'+':'')}${dt[i].toFixed(2)} s · ${(sim.v[i]*3.6).toFixed(0)} / ${(cmp.v[i]*3.6).toFixed(0)} km/h`]; }, L0,R0,W);
+}
+function gridIdx(d){ return Math.max(0,Math.min(state.dyn.sim.N-1,Math.round(d/state.dyn.ds))); }
+function hoverLine(X,T0,H,B0,fn,L0,R0,W){
+  if(state.hoverD==null) return;
+  const x=X(state.hoverD), [y,txt]=fn(state.hoverD);
+  pctx.strokeStyle=css('--ink'); pctx.setLineDash([4,3]); pctx.lineWidth=1; pctx.beginPath(); pctx.moveTo(x,T0); pctx.lineTo(x,H-B0); pctx.stroke(); pctx.setLineDash([]);
+  pctx.fillStyle=css('--accent'); pctx.beginPath(); pctx.arc(x,y,5,0,7); pctx.fill();
+  tooltip(txt, x, L0, R0, W);
+}
+function idxAtDist(d){ const p=state.prof.pts; let lo=0,hi=p.length-1; while(hi-lo>1){ const m=(lo+hi)>>1; if(p[m].d<d) lo=m; else hi=m; } return (d-p[lo].d < p[hi].d-d)?lo:hi; }
+function chartD(e){ const r=pc.getBoundingClientRect(), x=e.clientX-r.left; return Math.max(0,Math.min(pGeo.D,(x-pGeo.L0)/(pGeo.W-pGeo.L0-pGeo.R0)*pGeo.D)); }
+let chartDrag=false;
+pc.addEventListener('pointerdown', e=>{ if(!state.prof||!pGeo||!ride.active) return; chartDrag=true; seekToD(chartD(e)); });
+window.addEventListener('pointerup', ()=>{ chartDrag=false; });
+pc.addEventListener('pointermove', e=>{
+  if(!state.prof||!pGeo) return; const d=chartD(e);
+  if(ride.active){ if(chartDrag) seekToD(d); return; }
+  setHoverD(d);
+});
+pc.addEventListener('pointerleave', ()=>{ if(!ride.active) setHoverD(null); });
+let hoverMarker=null;
+function setHoverD(d){
+  state.hoverD=d; drawProfile();
+  if(d==null){ if(hoverMarker){map.removeLayer(hoverMarker);hoverMarker=null;} if(three.cursor) three.cursor.visible=false; return; }
+  let ll, pos=null;
+  if(state.dyn){ const i=gridIdx(d); ll=rlLatLon(i); if(three.rl) pos=[three.rl.x[i],three.rl.y[i],three.rl.z[i]]; }
+  else { const i=idxAtDist(d), q=state.prof.pts[i]; ll=[q.lat,q.lon]; if(three.local){ const v=three.local[i]; pos=[v.x,v.y,v.z]; } }
+  if(!hoverMarker) hoverMarker=L.circleMarker(ll,{radius:7,color:'#fff',weight:2,fillColor:'#d5741f',fillOpacity:1}).addTo(map); else hoverMarker.setLatLng(ll);
+  if(three.cursor && pos){ three.cursor.position.set(pos[0], pos[1]+three.width*0.5, pos[2]); three.cursor.visible=!ride.active; }
+}
+window.addEventListener('resize', ()=>{ drawProfile(); resize3D(); });
+
+/* ======================= 3D ======================= */
+const three = {};
+const ride={active:false, paused:false, s:0, roll:0, track:null, seekDrag:false, camPos:null, camLook:null};
+
+(function init3D(){
+  const el=$('view3d');
+  const r = new THREE.WebGLRenderer({antialias:true, logarithmicDepthBuffer:true});
+  r.setPixelRatio(window.devicePixelRatio||1); el.appendChild(r.domElement);
+  const scene=new THREE.Scene();
+  const cam=new THREE.PerspectiveCamera(55,1,1,2e6); cam.position.set(400,300,400);
+  const ctl=new THREE.OrbitControls(cam, r.domElement); ctl.enableDamping=true; ctl.maxPolarAngle=Math.PI*0.495;
+  scene.add(new THREE.HemisphereLight(0xffffff,0x445544,0.95));
+  const sun=new THREE.DirectionalLight(0xffffff,0.55); sun.position.set(1,2,1); scene.add(sun);
+  Object.assign(three,{r,scene,cam,ctl,el,group:null,cursor:null,bike:null});
+  resize3D();
+  let last=performance.now();
+  (function loop(t){
+    requestAnimationFrame(loop); const dt=Math.min(0.1,(t-last)/1000); last=t;
+    if(ride.active) rideFrame(dt); else ctl.update();
+    r.render(scene,cam);
+  })(last);
+})();
+function resize3D(){ const w=three.el.clientWidth, h=three.el.clientHeight; if(!w||!h) return; three.r.setSize(w,h); three.cam.aspect=w/h; three.cam.updateProjectionMatrix(); }
+function ribbon(xs,ys,zs,nx,nz,half,colors,lift){
+  const n=xs.length, pos=new Float32Array(n*6), col=new Float32Array(n*6), idx=[];
+  for(let i=0;i<n;i++){ const h=typeof half==='number'?half:half[i];
+    pos.set([xs[i]+nx[i]*h, ys[i]+lift, zs[i]+nz[i]*h, xs[i]-nx[i]*h, ys[i]+lift, zs[i]-nz[i]*h], i*6);
+    const c=colors[i]; col.set([c.r,c.g,c.b,c.r,c.g,c.b], i*6);
+    if(i<n-1){ const k=i*2; idx.push(k,k+1,k+2, k+1,k+3,k+2); } }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(pos,3)); g.setAttribute('color',new THREE.BufferAttribute(col,3)); g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
+function build3D(){
+  three.scene.background=new THREE.Color(css('--bg'));
+  if(!state.prof) return;
+  const P=state.prof.pts;
+  if(three.group){ three.scene.remove(three.group); three.group.traverse(o=>{ o.geometry&&o.geometry.dispose(); o.material&&o.material.dispose(); }); }
+  const ex=+$('ex').value, total=P[P.length-1].d;
+  const wSet=+$('w').value; const width = wSet>0 ? wSet : Math.max(8, total/350);
+  three.width=width;
+  const lat0=P[0].lat, lon0=P[0].lon, kx=Math.cos(toRad(lat0))*111320, kz=110540;
+  let mn=Infinity; P.forEach(p=>mn=Math.min(mn,p.e)); const base=mn-Math.max(10,width);
+  three.base=base; three.ex=ex;
+  const loc = P.map(p=>new THREE.Vector3((p.lon-lon0)*kx, (p.e-base)*ex, -(p.lat-lat0)*kz));
+  three.local=loc;
+  const g=new THREE.Group(), n=loc.length;
+  const xs=loc.map(v=>v.x), ys=loc.map(v=>v.y), zs=loc.map(v=>v.z), nx=[], nz=[];
+  for(let i=0;i<n;i++){ const a=loc[Math.max(0,i-1)], b=loc[Math.min(n-1,i+1)]; let tx=b.x-a.x, tz=b.z-a.z; const L=Math.hypot(tx,tz)||1; nx.push(-tz/L); nz.push(tx/L); }
+  const cols=P.map(p=>new THREE.Color(p.fix?css('--bridge'):gradeColor(p.g)));
+  g.add(new THREE.Mesh(ribbon(xs,ys,zs,nx,nz,width/2,cols,0),new THREE.MeshLambertMaterial({vertexColors:true, side:THREE.DoubleSide})));
+  // curtain down to the base plane
+  const curPos=new Float32Array(n*6), curCol=new Float32Array(n*6), idx=[];
+  for(let i=0;i<n;i++){ curPos.set([xs[i],ys[i],zs[i], xs[i],0,zs[i]], i*6); const c=cols[i].clone().multiplyScalar(0.55); curCol.set([c.r,c.g,c.b,c.r*0.6,c.g*0.6,c.b*0.6], i*6); if(i<n-1){ const k=i*2; idx.push(k,k+1,k+2, k+1,k+3,k+2); } }
+  const cg=new THREE.BufferGeometry(); cg.setAttribute('position',new THREE.BufferAttribute(curPos,3)); cg.setAttribute('color',new THREE.BufferAttribute(curCol,3)); cg.setIndex(idx);
+  g.add(new THREE.Mesh(cg,new THREE.MeshBasicMaterial({vertexColors:true, side:THREE.DoubleSide, transparent:true, opacity:0.45, depthWrite:false})));
+  // centre line (lane divider)
+  const lg=new THREE.BufferGeometry().setFromPoints(loc.map(v=>new THREE.Vector3(v.x,v.y+Math.max(0.05,width*0.004),v.z)));
+  g.add(new THREE.Line(lg,new THREE.LineBasicMaterial({color:new THREE.Color(css('--road'))})));
+  three.rl=null;
+  if(state.dyn) addRacingLine(g, base, ex, width);
+  three.bike=makeBike(three.rl?three.rl.scale:Math.max(1,width/7)); g.add(three.bike);
+  const box=new THREE.Box3().setFromPoints(loc), size=box.getSize(new THREE.Vector3()), ctr=box.getCenter(new THREE.Vector3());
+  const span=Math.max(size.x,size.z)*1.2+width*4, cell=nice(span/20);
+  const grid=new THREE.GridHelper(Math.ceil(span/cell)*cell, Math.ceil(span/cell), new THREE.Color(css('--muted')), new THREE.Color(css('--line')));
+  grid.position.set(ctr.x,0,ctr.z); g.add(grid);
+  const mk=(v,c)=>{ const m=new THREE.Mesh(new THREE.SphereGeometry(width*0.6,20,14),new THREE.MeshLambertMaterial({color:c})); m.position.set(v.x,v.y+width*0.6,v.z); return m; };
+  g.add(mk(loc[0],0x2f9e57)); g.add(mk(loc[n-1],0xc83a2e));
+  three.cursor=new THREE.Mesh(new THREE.SphereGeometry(width*0.35,16,12),new THREE.MeshBasicMaterial({color:0xd5741f})); three.cursor.visible=false; g.add(three.cursor);
+  const keepView=!!three.box;
+  three.scene.add(g); three.group=g; three.box=box;
+  $('drive').disabled=false; $('fit').disabled=false; $('empty3d').hidden=true;
+  if(ride.active) ride.track=rideTrack();
+  else if(!keepView || !three.viewSet){ fitView(); three.viewSet=true; }
+}
+// ideal line (and the comparison line) drawn on the road surface; lateral offsets are scaled with the displayed road width
+function lineDisplay(r, base, ex, width){
+  const {W,g:grid}=state.dyn, N=r.N, P=state.prof.pts;
+  const xs=new Float32Array(N), ys=new Float32Array(N), zs=new Float32Array(N), nx=new Float32Array(N), nz=new Float32Array(N);
+  let j=0;
+  for(let i=0;i<N;i++){
+    const s=width/Math.max(2,W[i]);
+    xs[i]=r.Cx[i]+r.n[i]*s*r.Nx[i]; zs[i]=-(r.Cy[i]+r.n[i]*s*r.Ny[i]);
+    while(j<P.length-2 && P[j+1].d<grid[i].d) j++;
+    const t=(grid[i].d-P[j].d)/((P[j+1].d-P[j].d)||1); ys[i]=(P[j].e+(P[j+1].e-P[j].e)*Math.max(0,Math.min(1,t))-base)*ex;
+    nx[i]=r.Nx[i]; nz[i]=-r.Ny[i];
+  }
+  return {xs,ys,zs,nx,nz};
+}
+function addRacingLine(g, base, ex, width){
+  const {sim,cmp}=state.dyn, N=sim.N;
+  const L=lineDisplay(sim, base, ex, width);
+  const col=dynColors().t.map(t=>new THREE.Color(rampColor(t)));
+  const lift=Math.max(0.08,width*0.012), half=Math.max(0.25,width*0.07);
+  g.add(new THREE.Mesh(ribbon(L.xs,L.ys,L.zs,L.nx,L.nz,half,col,lift),new THREE.MeshBasicMaterial({vertexColors:true, side:THREE.DoubleSide})));
+  if($('showCmp').checked && cmp.lineName!==sim.lineName){
+    const C=lineDisplay(cmp, base, ex, width), gc=new THREE.Color(css('--cmp')), cc=new Array(N).fill(gc);
+    g.add(new THREE.Mesh(ribbon(C.xs,C.ys,C.zs,C.nx,C.nz,half*0.45,cc,lift*0.8),new THREE.MeshBasicMaterial({vertexColors:true, side:THREE.DoubleSide, transparent:true, opacity:0.85})));
+  }
+  const sD=new Float64Array(N); for(let i=1;i<N;i++) sD[i]=sD[i-1]+Math.hypot(L.xs[i]-L.xs[i-1],L.ys[i]-L.ys[i-1],L.zs[i]-L.zs[i-1]);
+  let wm=0; for(let i=0;i<N;i++) wm+=state.dyn.W[i]; wm/=N;
+  three.rl={x:L.xs,y:L.ys,z:L.zs,sD,lift,scale:Math.max(1,width/wm)};
+}
+// simple motorcycle + rider, built along +z (forward), y up; rolled about its own forward axis
+function makeBike(scale){
+  const b=new THREE.Group(), body=new THREE.Group();
+  const mat=c=>new THREE.MeshLambertMaterial({color:c});
+  const wheel=z=>{ const m=new THREE.Mesh(new THREE.CylinderGeometry(0.31,0.31,0.18,20), mat(0x222222)); m.rotation.z=Math.PI/2; m.position.set(0,0.31,z); return m; };
+  body.add(wheel(0.72)); body.add(wheel(-0.68));
+  const tank=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.36,1.25), mat(0xd5741f)); tank.position.set(0,0.66,0.02); body.add(tank);
+  const fairing=new THREE.Mesh(new THREE.BoxGeometry(0.42,0.3,0.4), mat(0xd5741f)); fairing.position.set(0,0.82,0.58); fairing.rotation.x=-0.5; body.add(fairing);
+  const torso=new THREE.Mesh(new THREE.BoxGeometry(0.38,0.5,0.3), mat(0x2b3330)); torso.position.set(0,1.05,-0.12); torso.rotation.x=0.75; body.add(torso);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.16,16,12), mat(0xe8e8e8)); head.position.set(0,1.28,0.12); body.add(head);
+  b.add(body); b.scale.setScalar(scale); b.rotation.order='YXZ'; b.visible=false;
+  return b;
+}
+function fitView(){
+  if(!three.box) return;
+  const c=three.box.getCenter(new THREE.Vector3()), s=three.box.getSize(new THREE.Vector3()), R=Math.max(s.x,s.y,s.z)*0.75+50;
+  three.ctl.target.copy(c); three.cam.up.set(0,1,0); three.cam.position.set(c.x+R*0.9, c.y+R*0.8, c.z+R*0.9); three.cam.near=Math.max(0.5,R/5000); three.cam.updateProjectionMatrix(); three.ctl.update();
+}
+$('fit').onclick=()=>{ if(ride.active) exitRide(); else fitView(); };
+$('ex').oninput=()=>{ const v=+$('ex').value; $('exv').textContent = v===1?'×1 (קנה מידה אמיתי)':'×'+v+' (מוגזם לתצוגה)'; if(state.prof) build3D(); };
+$('w').oninput=()=>{ const v=+$('w').value; $('wv').textContent=v?v+' מ׳':'אוטומטי'; if(state.prof) build3D(); };
+$('spd').oninput=()=>{ $('spdv').textContent='×'+$('spd').value; };
+
+/* ======================= ride along ======================= */
+// Rides the selected ideal line at the simulated speed (or the centre line at 60 km/h before the line is computed).
+function lerpAt(arr, i, f){ return arr[i]+(arr[Math.min(arr.length-1,i+1)]-arr[i])*f; }
+function idxIn(a, s){ let lo=0, hi=a.length-1; if(s<=a[0]) return [0,0]; if(s>=a[hi]) return [hi,0];
+  while(hi-lo>1){ const m=(lo+hi)>>1; if(a[m]<s) lo=m; else hi=m; } return [lo,(s-a[lo])/((a[hi]-a[lo])||1)]; }
+function rideTrack(){
+  if(state.dyn && three.rl){ const rl=three.rl; return {dyn:true, x:rl.x, y:rl.y, z:rl.z, s:rl.sD, len:rl.sD[rl.sD.length-1], lift:rl.lift, scale:rl.scale}; }
+  const loc=three.local, n=loc.length, s=new Float64Array(n), x=new Float32Array(n), y=new Float32Array(n), z=new Float32Array(n);
+  for(let i=0;i<n;i++){ x[i]=loc[i].x; y[i]=loc[i].y; z[i]=loc[i].z; if(i) s[i]=s[i-1]+Math.hypot(x[i]-x[i-1],y[i]-y[i-1],z[i]-z[i-1]); }
+  return {dyn:false, x, y, z, s, len:s[n-1], lift:0.05, scale:Math.max(1,three.width/7)};
+}
+function buildLeanGauge(limitDeg){
+  const ticks=$('leanTicks'); let h='';
+  for(let a=-60;a<=60;a+=15){ const r=Math.PI*a/180, x1=Math.sin(r)*58, y1=-Math.cos(r)*58, x2=Math.sin(r)*66, y2=-Math.cos(r)*66;
+    h+=`<line class="g-tick" x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`;
+    if(a%30===0 && a!==0) h+=`<text class="g-lbl" x="${(Math.sin(r)*47).toFixed(1)}" y="${(-Math.cos(r)*47+3).toFixed(1)}">${Math.abs(a)}</text>`; }
+  ticks.innerHTML=h;
+  const set=(el,deg)=>{ const r=Math.PI*deg/180; el.setAttribute('x1',(Math.sin(r)*52).toFixed(1)); el.setAttribute('y1',(-Math.cos(r)*52).toFixed(1)); el.setAttribute('x2',(Math.sin(r)*70).toFixed(1)); el.setAttribute('y2',(-Math.cos(r)*70).toFixed(1)); };
+  const lim=Math.min(60,limitDeg||60); set($('limL'),-lim); set($('limR'),lim);
+  $('limL').style.display=$('limR').style.display=limitDeg?'':'none';
+}
+function startRide(){
+  if(!three.local) return;
+  ride.track=rideTrack(); ride.active=true; ride.paused=false; ride.s=0; ride.roll=0; ride.camPos=null; ride.camLook=null;
+  three.ctl.enabled=false; three.cam.near=0.2; three.cam.updateProjectionMatrix();
+  if(three.cursor) three.cursor.visible=false;
+  $('ride').hidden=false; $('drive').hidden=true; $('pause').hidden=false; $('stop').hidden=false; $('seek').hidden=false;
+  $('pause').textContent='❚❚ השהה';
+  buildLeanGauge(state.dyn ? Math.atan(state.dyn.sim.latCoef)*180/Math.PI : 0);
+  $('hCmpChip').hidden=!(state.dyn && state.dyn.cmp.lineName!==state.dyn.sim.lineName);
+  if(state.dyn) $('hCmpK').textContent='מול '+LINE_NAMES[state.dyn.cmp.lineName];
+}
+function exitRide(){
+  if(!ride.active) return;
+  ride.active=false; ride.paused=false;
+  $('ride').hidden=true; $('drive').hidden=false; $('pause').hidden=true; $('stop').hidden=true; $('seek').hidden=true;
+  if(three.bike) three.bike.visible=false;
+  three.ctl.enabled=true; fitView(); setHoverD(null);
+}
+function togglePause(){
+  if(!ride.active) return;
+  ride.paused=!ride.paused; $('pause').textContent=ride.paused?'▶ המשך':'❚❚ השהה';
+  three.ctl.enabled=ride.paused;
+  if(ride.paused && three.bike) three.ctl.target.copy(three.bike.position);
+  if(!ride.paused){ ride.camPos=null; ride.camLook=null; }
+}
+function seekToD(d){
+  if(!ride.active) return;
+  if(state.dyn && ride.track.dyn) ride.s=ride.track.s[gridIdx(d)];
+  else { const i=idxAtDist(d); ride.s=ride.track.s[i]; }
+  ride.camPos=null; ride.camLook=null; rideFrame(0, true);
+}
+$('drive').onclick=startRide;
+$('pause').onclick=togglePause;
+$('stop').onclick=exitRide;
+$('seek').addEventListener('pointerdown',()=>{ ride.seekDrag=true; });
+$('seek').addEventListener('pointerup',()=>{ ride.seekDrag=false; });
+$('seek').addEventListener('input',()=>{ if(!ride.active) return; ride.s=(+$('seek').value/1000)*ride.track.len; ride.camPos=null; ride.camLook=null; rideFrame(0,true); });
+$('camMode').onchange=()=>{ ride.camPos=null; ride.camLook=null; if(ride.active && ride.paused) rideFrame(0,true); };
+$('fs').onclick=()=>{ const el=$('pane3d');
+  try{ if(document.fullscreenElement) document.exitFullscreen(); else if(el.requestFullscreen) el.requestFullscreen().catch(()=>{}); }catch(e){} };
+document.addEventListener('fullscreenchange',()=>setTimeout(resize3D,50));
+document.addEventListener('keydown',e=>{
+  if(!ride.active || /INPUT|SELECT|TEXTAREA/.test((e.target&&e.target.tagName)||'')) return;
+  if(e.code==='Space'){ e.preventDefault(); togglePause(); }
+  else if(e.key==='Escape') exitRide();
+  else if(e.key==='ArrowRight'||e.key==='ArrowLeft'){ e.preventDefault(); ride.s=Math.max(0,Math.min(ride.track.len, ride.s+(e.key==='ArrowRight'?1:-1)*Math.max(50,ride.track.len/100))); ride.camPos=null; rideFrame(0,true); }
+});
+function rideFrame(dt, force){
+  const T=ride.track, sim=state.dyn&&T.dyn?state.dyn.sim:null, rate=+$('spd').value;
+  let [i,f]=idxIn(T.s, ride.s);
+  const v = sim ? Math.max(0.5,lerpAt(sim.v,i,f)) : 60/3.6;
+  if(!ride.paused && dt>0){
+    const k = sim ? T.len/Math.max(1,sim.sR[sim.N-1]) : 1;             // displayed metres per real metre along the line
+    ride.s += v*dt*rate*k;
+    if(ride.s>=T.len){ ride.s=T.len; togglePause(); }
+    [i,f]=idxIn(T.s, ride.s);
+  }
+  if(!ride.seekDrag) $('seek').value=Math.round(ride.s/T.len*1000);
+  // pose of the bike
+  const pos=new THREE.Vector3(lerpAt(T.x,i,f), lerpAt(T.y,i,f)+T.lift, lerpAt(T.z,i,f));
+  const [ia,fa]=idxIn(T.s, Math.min(T.len, ride.s+Math.max(2,T.scale*2)));
+  const ahead=new THREE.Vector3(lerpAt(T.x,ia,fa), lerpAt(T.y,ia,fa)+T.lift, lerpAt(T.z,ia,fa));
+  let fwd=ahead.clone().sub(pos); if(fwd.lengthSq()<1e-9){ const [ib,fb]=idxIn(T.s, Math.max(0,ride.s-2)); fwd=pos.clone().sub(new THREE.Vector3(lerpAt(T.x,ib,fb),lerpAt(T.y,ib,fb)+T.lift,lerpAt(T.z,ib,fb))); }
+  fwd.normalize();
+  const leanDeg = sim ? lerpAt(sim.lean,i,f)*Math.sign(sim.k[i]||0) : 0;   // + = leaning left
+  const target = leanDeg*Math.PI/180;
+  ride.roll += (target-ride.roll)*Math.min(1, dt>0 ? dt*8 : 1);
+  if(three.bike){
+    three.bike.position.copy(pos); three.bike.rotation.set(Math.asin(-Math.max(-1,Math.min(1,fwd.y))), Math.atan2(fwd.x,fwd.z), -ride.roll);
+    three.bike.visible=$('camMode').value!=='rider';
+  }
+  // camera
+  if(!ride.paused || force){
+    const mode=$('camMode').value, sc=T.scale, up=new THREE.Vector3(0,1,0), cam=three.cam;
+    let cp, cl;
+    if(mode==='rider'){ cp=pos.clone().addScaledVector(up,1.25*sc); const [il,fl]=idxIn(T.s, Math.min(T.len, ride.s+Math.max(25*sc, v*1.5*(T.len/Math.max(1,sim?sim.sR[sim.N-1]:T.len)))));
+      cl=new THREE.Vector3(lerpAt(T.x,il,fl), lerpAt(T.y,il,fl)+1.1*sc, lerpAt(T.z,il,fl)); }
+    else if(mode==='top'){ cp=pos.clone().addScaledVector(up,55*sc).addScaledVector(fwd,-18*sc); cl=pos.clone(); }
+    else { cp=pos.clone().addScaledVector(fwd,-7.5*sc).addScaledVector(up,2.8*sc); cl=pos.clone().addScaledVector(fwd,12*sc).addScaledVector(up,0.9*sc); }
+    const a = (dt>0 && ride.camPos) ? 1-Math.exp(-dt*7) : 1;
+    ride.camPos = ride.camPos ? ride.camPos.lerp(cp,a) : cp; ride.camLook = ride.camLook ? ride.camLook.lerp(cl,a) : cl;
+    cam.up.set(0,1,0); cam.position.copy(ride.camPos); cam.lookAt(ride.camLook);
+    if(mode==='rider') cam.rotateZ(ride.roll);
+  } else three.ctl.update();
+  // data overlay
+  const P=state.prof.pts, G2=sim?state.dyn.g:null, dCentre = sim ? G2[i].d+(G2[Math.min(i+1,sim.N-1)].d-G2[i].d)*f : P[i].d+(P[Math.min(i+1,P.length-1)].d-P[i].d)*f;
+  const q=P[idxAtDist(dCentre)];
+  $('hSpd').textContent=Math.round(v*3.6);
+  $('hDist').textContent=fmtKm(dCentre)+' / '+fmtKm(P[P.length-1].d);
+  $('hElev').textContent=q.e.toFixed(0)+' m';
+  $('hGrade').textContent=(q.g>0?'+':'')+q.g.toFixed(1)+'%';
+  $('hNeedle').setAttribute('transform',`rotate(${(-Math.max(-60,Math.min(60,leanDeg))).toFixed(1)})`);
+  $('hLean').textContent=sim ? `${Math.abs(leanDeg).toFixed(0)}°${Math.abs(leanDeg)>=1?(leanDeg>0?' שמאלה':' ימינה'):''}` : '—';
+  if(sim){
+    const d=state.dyn, gE=MotoSim.G*Math.cos(sim.phi[i])+v*v*sim.kv[i], muG=d.p.mu*Math.max(0.1,gE);
+    const aLat=lerpAt(sim.aLat,i,f), aLong=lerpAt(sim.aLong,i,f);
+    const aT=aLong+0.5*d.p.rho*d.p.CdA*v*v/d.p.mass+MotoSim.G*d.p.Crr*Math.cos(sim.phi[i])+MotoSim.G*Math.sin(sim.phi[i]);
+    const cx=Math.max(-46,Math.min(46,-40*aLat/muG)), cy=Math.max(-46,Math.min(46,-40*aT/muG));
+    $('hGdot').setAttribute('cx',cx.toFixed(1)); $('hGdot').setAttribute('cy',cy.toFixed(1));
+    $('hG').textContent=(Math.hypot(aLat,aT)/MotoSim.G).toFixed(2)+' g';
+    $('hTime').textContent=fmtTime(lerpAt(sim.t,i,f),1);
+    const k=Math.abs(sim.k[i]); $('hRad').textContent= k>1/3000 ? Math.round(1/k)+' m' : 'ישר';
+    const lim=sim.limit[i]; $('hLimit').textContent=LIMIT_NAMES[lim]||'—'; $('hLimChip').className='chip lim '+lim;
+    const legal=d.legal[i]; $('hSign').hidden=!(legal>0); if(legal>0) $('hSign').textContent=Math.round(legal*3.6);
+    if(!$('hCmpChip').hidden){ const dd=lerpAt(d.cmp.t,i,f)-lerpAt(sim.t,i,f); $('hCmp').textContent=(dd>=0?'+':'')+dd.toFixed(2)+' s'; $('hCmp').className=dd>=0?'pos':'neg'; }
+    // next corner ahead on the line
+    const ap=d.apex; let nx=null; for(let a=0;a<ap.length;a++) if(ap[a]>i+2){ nx=ap[a]; break; }
+    if(nx!==null && sim.sR[nx]-sim.sR[i]<1500){
+      const dist=sim.sR[nx]-sim.sR[i], dir=sim.k[nx]>0?'שמאלה':'ימינה';
+      $('hNext').hidden=false; $('hNext').innerHTML=`פנייה ${dir} בעוד <b>${Math.round(dist)} m</b> · מהירות בשיא הפנייה <b>${Math.round(sim.v[nx]*3.6)} km/h</b> · הטייה <b>${sim.lean[nx].toFixed(0)}°</b> · רדיוס <b>${Math.round(1/Math.max(1e-6,Math.abs(sim.k[nx])))} m</b>`;
+    } else $('hNext').hidden=true;
+  } else {
+    $('hGdot').setAttribute('cx',0); $('hGdot').setAttribute('cy',0); $('hG').textContent='—';
+    $('hTime').textContent=fmtTime(dCentre/(60/3.6),1); $('hRad').textContent='—'; $('hLimit').textContent='לא חושב קו אידיאלי'; $('hLimChip').className='chip lim';
+    $('hSign').hidden=true; $('hNext').hidden=true;
+  }
+  state.hoverD=dCentre; drawProfile();
+  if(hoverMarker) hoverMarker.setLatLng(sim?rlLatLon(i):[q.lat,q.lon]); else hoverMarker=L.circleMarker(sim?rlLatLon(i):[q.lat,q.lon],{radius:7,color:'#fff',weight:2,fillColor:'#d5741f',fillOpacity:1}).addTo(map);
+}
+
+/* ======================= export ======================= */
+function enableExports(on){ ['xGpx','xCsv','xObj','xJson'].forEach(id=>$(id).disabled=!on); }
+function download(name, text, type){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type})); a.download=name;
+  document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},500);
+}
+const srcLabel=()=> state.prof.label + ($('osmFix').checked?'; bridges/tunnels corrected with OSM':'');
+$('xGpx').onclick=()=>{
+  const P=state.prof.pts;
+  const s=`<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Route3D" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><desc>Elevation source: ${srcLabel()}</desc></metadata>\n<trk><name>Route3D</name><trkseg>\n`
+   + P.map(p=>`<trkpt lat="${p.lat.toFixed(7)}" lon="${p.lon.toFixed(7)}"><ele>${p.e.toFixed(2)}</ele></trkpt>`).join('\n') + `\n</trkseg></trk>\n</gpx>`;
+  download('route3d.gpx', s, 'application/gpx+xml');
+};
+$('xCsv').onclick=()=>{
+  const P=state.prof.pts;
+  const s='distance_m,lat,lon,elevation_m,elevation_dem_m,structure,grade_pct,highway,maxspeed\n'+P.map(p=>[p.d.toFixed(1),p.lat.toFixed(7),p.lon.toFixed(7),p.e.toFixed(2),p.eDem.toFixed(2),p.fix||'',p.g.toFixed(2),(p.osm&&p.osm.highway)||'',(p.osm&&p.osm.maxspeed)||''].join(',')).join('\n');
+  download('route3d.csv', '# elevation source: '+srcLabel()+', grade window '+$('win').value+' m\n'+s, 'text/csv');
+};
+$('xJson').onclick=()=>{
+  const P=state.prof.pts;
+  const gj={type:'FeatureCollection',features:[{type:'Feature',properties:{elevation_source:srcLabel(),grade_window_m:+$('win').value,grades_pct:P.map(p=>+p.g.toFixed(2))},
+    geometry:{type:'LineString',coordinates:P.map(p=>[+p.lon.toFixed(7),+p.lat.toFixed(7),+p.e.toFixed(2)])}}]};
+  download('route3d.geojson', JSON.stringify(gj), 'application/geo+json');
+};
+$('xObj').onclick=()=>{
+  const P=state.prof.pts, w=three.width, lat0=P[0].lat, lon0=P[0].lon, kx=Math.cos(toRad(lat0))*111320, kz=110540;
+  const Lp=P.map(p=>[(p.lon-lon0)*kx, p.e, -(p.lat-lat0)*kz]); const v=[], f=[];
+  for(let i=0;i<Lp.length;i++){
+    const a=Lp[Math.max(0,i-1)], b=Lp[Math.min(Lp.length-1,i+1)]; let tx=b[0]-a[0], tz=b[2]-a[2]; const l=Math.hypot(tx,tz)||1; tx/=l; tz/=l;
+    const nx=-tz*w/2, nz=tx*w/2; v.push(`v ${(Lp[i][0]+nx).toFixed(3)} ${Lp[i][1].toFixed(3)} ${(Lp[i][2]+nz).toFixed(3)}`, `v ${(Lp[i][0]-nx).toFixed(3)} ${Lp[i][1].toFixed(3)} ${(Lp[i][2]-nz).toFixed(3)}`);
+    if(i<Lp.length-1){ const k=i*2+1; f.push(`f ${k} ${k+1} ${k+3} ${k+2}`); }
+  }
+  download('route3d.obj', `# Route3D road ribbon, metres, Y up, true vertical scale\n# elevation source: ${srcLabel()}\no road\n`+v.join('\n')+'\n'+f.join('\n')+'\n', 'text/plain');
+};
+$('xLine').onclick=()=>{
+  if(!state.dyn) return; const {sim,g,p}=state.dyn; const rows=[];
+  for(let i=0;i<sim.N;i++){ const ll=rlLatLon(i); rows.push([g[i].d.toFixed(1),sim.sR[i].toFixed(1),ll[0].toFixed(7),ll[1].toFixed(7),sim.n[i].toFixed(2),sim.k[i].toFixed(5),(sim.v[i]*3.6).toFixed(1),sim.lean[i].toFixed(1),sim.grip[i].toFixed(2),sim.t[i].toFixed(2),sim.limit[i]].join(',')); }
+  const bike=$('moto').options[$('moto').selectedIndex].textContent;
+  download('ideal-line.csv', `# ${bike}; mass ${p.mass} kg incl. rider; ${p.powerW/1000} kW; mu ${p.mu}; line ${sim.lineName}; elevation ${srcLabel()}\n`
+    +'centre_distance_m,line_distance_m,lat,lon,offset_m(+left),curvature_1pm,speed_kmh,lean_deg,grip_use,time_s,limited_by\n'+rows.join('\n'), 'text/csv');
+};
+
+drawProfile(); three.scene.background=new THREE.Color(css('--bg'));
+locateUser(false);
+})();
+</script>
+</body>
+</html>
