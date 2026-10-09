@@ -94,7 +94,7 @@ details .group{gap:8px}
 .chip{background:var(--hud-bg);border-radius:6px;padding:3px 9px 4px;display:flex;flex-direction:column;min-width:62px}
 .chip .k{font:11px/1.3 var(--f-body);color:var(--hud-mut)}
 .chip b{font-weight:500;font-size:15px;direction:ltr;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.chip.lim.brake b{color:var(--hud-brake)} .chip.lim.accel b{color:var(--hud-go)} .chip.lim.corner b{color:var(--hud-warn)}
+.chip.lim.brake b{color:var(--hud-brake)} .chip.lim.accel b{color:var(--hud-go)} .chip.lim.corner b{color:var(--hud-warn)} .chip.lim.roll b{color:var(--hud-warn)}
 .next{background:var(--hud-bg);border-radius:6px;padding:5px 10px;font:13px/1.35 var(--f-body)}
 .next b{font-family:var(--f-mono);font-weight:500;color:var(--hud-warn)}
 .ride-bottom{position:absolute;bottom:84px;inset-inline:10px;display:flex;justify-content:space-between;align-items:flex-end;gap:8px}
@@ -265,7 +265,7 @@ details .group{gap:8px}
           <option value="centre">מרכז התחום</option>
         </select>
       </label>
-      <div class="note">זמן מינימלי: ממזער את T = ∫ √((1 − n·κ)² + n′²) / v ds תחת האילוצים: |n| בתוך הכביש פחות חצי רוחב האופנוע, θ = arctan(v²κ/g) ≤ arctan(μ), v ≤ √(μ·g·R), מעגל החיכוך (a<sub>long</sub>/μg)² + (a<sub>lat</sub>/μg)² ≤ 1, הספק המנוע ו־wheelie/stoppie.</div>
+      <div class="note">זמן מינימלי: ממזער את T = ∫ √((1 − n·κ)² + n′²) / v ds תחת האילוצים: |n| בתוך הכביש פחות חצי רוחב האופנוע, θ = arctan(v²κ/g) ≤ arctan(μ), v ≤ √(μ·g·R), מעגל החיכוך (a<sub>long</sub>/μg)² + (a<sub>lat</sub>/μg)² ≤ 1, קצב הטייה dθ/dt ≤ ω, הספק המנוע ו־wheelie/stoppie.</div>
       <div class="grid2">
         <label>השוואה מול
           <select id="cmp">
@@ -295,6 +295,7 @@ details .group{gap:8px}
             <label>החלקת מעבר משקל σ (מ׳)<input type="number" id="sK" step="1" min="0" max="40" value="6"></label>
             <label>tanh: מקדם רגישות C (מ׳)<input type="number" id="tC" step="10" min="5" max="1000" value="120"></label>
             <label>tanh: מבט קדימה σ (מ׳)<input type="number" id="tLook" step="5" min="0" max="200" value="30"></label>
+            <label>קצב הטייה מרבי (°/ש׳, 0 = ללא)<input type="number" id="aRoll" step="5" min="0" max="400" value="90"></label>
             <label>תקרת מהירות (קמ״ש, 0 = ללא)<input type="number" id="vCap" step="5" min="0" max="400" value="0"></label>
           </div>
           <label class="check"><input type="checkbox" id="legal"> הגבל למהירות המותרת לפי OSM</label>
@@ -1005,7 +1006,7 @@ function readParams(){
     wheelbase:num('mWb')/1000, cogH:num('aCog'), frontFrac:num('aFront'),
     CdA:num('aCdA'), rho:num('aRho'), Crr:num('aCrr'), mu:num('mMu'), leanMax:num('aLean'),
     bikeW:num('bikeW'), margin:num('margin'),
-    method:$('method').value, tanhC:num('tC'), sigmaLook:num('tLook'), sigmaKappa:num('sK'), sigmaCenter:5,
+    method:$('method').value, tanhC:num('tC'), sigmaLook:num('tLook'), sigmaKappa:num('sK'), sigmaCenter:2, rollRate:num('aRoll'),
     fromRest:$('fromRest').checked, stopEnd:$('stopEnd').checked, useLegal:$('legal').checked, vCap:num('vCap')/3.6,
   };
   if(p.mass<=0||p.powerW<=0||p.mu<=0||p.cogH<=0) throw new Error('הספק, משקל, μ וגובה מרכז הכובד חייבים להיות חיוביים');
@@ -1013,15 +1014,20 @@ function readParams(){
 }
 const tick=()=>new Promise(r=>setTimeout(r,0));
 // road corridor per grid point: |n| ≤ (w_road − w_bike)/2 − margin, or own (right-hand) lane only
+// The route arrives as a polyline (straight segments between map vertices: zero curvature along each segment, a
+// spike at each vertex). The physics needs a smooth centre line, so a spline is fitted through the vertices and
+// resampled at uniform arc length; grid[i].d is the matching distance along the route as shown on the charts.
 function buildInput(p){
   const P=state.prof.pts, total=P[P.length-1].d;
-  const grid=resample(state.prof.geom, Math.max(2, total/15000)), N=grid.length, ds=total/(N-1);
   const lat0=P[0].lat, lon0=P[0].lon, kx=Math.cos(toRad(lat0))*111320, ky=110540;
-  const X=new Float64Array(N), Y=new Float64Array(N), E=new Float64Array(N), lo=new Float64Array(N), hi=new Float64Array(N), legal=new Float64Array(N), W=new Float64Array(N);
+  const poly=state.prof.geom.map(q=>[(q[1]-lon0)*kx,(q[0]-lat0)*ky]);
+  const SP=MotoSim.splineResample(poly, Math.max(2, total/15000)), N=SP.N, ds=SP.ds;
+  const grid=new Array(N);
+  const X=SP.X, Y=SP.Y, E=new Float64Array(N), lo=new Float64Array(N), hi=new Float64Array(N), legal=new Float64Array(N), W=new Float64Array(N);
   const mode=$('corr').value, half=p.bikeW/2+p.margin, defW=+$('defW').value;
   let j=0, osmW=0;
   for(let i=0;i<N;i++){
-    X[i]=(grid[i].lon-lon0)*kx; Y[i]=(grid[i].lat-lat0)*ky;
+    grid[i]={lat:lat0+Y[i]/ky, lon:lon0+X[i]/kx, d:Math.min(total,Math.max(0,SP.D[i]))};
     while(j<P.length-2 && P[j+1].d<grid[i].d) j++;
     const t=(grid[i].d-P[j].d)/((P[j+1].d-P[j].d)||1); E[i]=P[j].e+(P[j+1].e-P[j].e)*Math.max(0,Math.min(1,t));
     const tags=(t<0.5?P[j]:P[j+1]).osm, rw=roadWidth(tags); if(rw.w) osmW++;
@@ -1068,7 +1074,7 @@ async function computeDyn(){
 $('goDyn').onclick=computeDyn;
 $('stopOpt').onclick=()=>{ stopOptFlag=true; };
 const LINE_NAMES={'optimal':'זמן מינימלי (אופטימיזציה)', 'mincurv':'עקמומיות מינימלית', 'minmax':'רדיוס מרבי', 'tanh':'נוסחת tanh', 'centre':'מרכז התחום'};
-const LIMIT_NAMES={corner:'אחיזה / הטייה בפנייה', crest:'גבול ניתוק בפסגה', legal:'מהירות מותרת (OSM)', cap:'תקרת מהירות', brake:'בלימה לקראת פנייה', accel:'האצה (מנוע / אחיזה)', none:'—'};
+const LIMIT_NAMES={corner:'אחיזה / הטייה בפנייה', roll:'קצב הטייה מרבי', crest:'גבול ניתוק בפסגה', legal:'מהירות מותרת (OSM)', cap:'תקרת מהירות', brake:'בלימה לקראת פנייה', accel:'האצה (מנוע / אחיזה)', none:'—'};
 function cornerApexes(sim){
   const out=[]; let i=0;
   while(i<sim.N){ if(sim.limit[i]!=='corner'){ i++; continue; } let j=i, m=i; while(j+1<sim.N && sim.limit[j+1]==='corner'){ j++; if(sim.v[j]<sim.v[m]) m=j; } out.push(m); i=j+1; }
@@ -1090,7 +1096,8 @@ function showDyn(){
   $('ckOut').innerHTML='אילוצים על הקו שנבחר:<br>'
     + ok(check.maxOut<0.01,'בתוך גבולות הכביש (כולל רוחב האופנוע)')+'<br>'
     + ok(check.maxLean<=check.leanLimit+0.2,`הטייה מרבית <b>${check.maxLean.toFixed(1)}°</b> מתוך <b>${check.leanLimit.toFixed(1)}°</b> מותרות`)+'<br>'
-    + ok(check.maxGrip<=1.02,`ניצול מעגל החיכוך עד <b>${Math.round(check.maxGrip*100)}%</b>`);
+    + ok(check.maxGrip<=1.02,`ניצול מעגל החיכוך עד <b>${Math.round(check.maxGrip*100)}%</b>`)
+    + (state.dyn.p.rollRate>0 ? '<br>'+ok(check.rollP99<=state.dyn.p.rollRate*1.15,`קצב הטייה: 99% מהדרך עד <b>${Math.round(check.rollP99)}°/ש׳</b> (מגבלה ${state.dyn.p.rollRate}°/ש׳, שיא רגעי ${Math.round(check.rollMax)}°/ש׳)`) : '');
   renderCmpTable();
   let msg=`הושלם. רוחב הכביש נלקח מ־OSM ב־${Math.round(state.dyn.osmWidth*100)}% מהמסלול, בשאר ${$('defW').value} מ׳.`;
   if(optInfo) msg+=`\nהאופטימיזציה התחילה מ"${LINE_NAMES[optInfo.start]}" (${fmtTime(optInfo.startT,1)}) וקיצרה את הזמן ב־${(optInfo.startT-sim.time).toFixed(2)} ש׳`
@@ -1130,7 +1137,7 @@ function updateGradLegend(){
   $('gMin').textContent=f(c.a); $('gMax').textContent=f(c.b);
 }
 $('colorBy').onchange=()=>{ if(!state.dyn) return; updateGradLegend(); drawDynOnMap(); build3D(); drawProfile(); };
-['mPow','mMass','mWb','mRider','mMu','mSurf','moto','corr','method','aLean','aCdA','aCog','aFront','aEta','aCrr','aRho','bikeW','margin','defW','sK','tC','tLook','vCap','legal','fromRest','stopEnd']
+['mPow','mMass','mWb','mRider','mMu','mSurf','moto','corr','method','aLean','aCdA','aCog','aFront','aEta','aCrr','aRho','aRoll','bikeW','margin','defW','sK','tC','tLook','vCap','legal','fromRest','stopEnd']
   .forEach(id=>$(id).addEventListener('change',()=>{ if(state.dyn) computeDyn(); }));
 
 let dynLayer=null;
@@ -1260,7 +1267,8 @@ function drawCmp(W,H){
   pctx.fillText(`הזמן שהקו "${LINE_NAMES[sim.lineName]}" מרוויח מול "${LINE_NAMES[cmp.lineName]}" עד כל נקודה בדרך · בסוף: ${(dt[N-1]>=0?'+':'')}${dt[N-1].toFixed(2)} ש׳`, W-R0, T0-8);
   hoverLine(X,T0,H,B0, d=>{ const i=gridIdx(d); return [Y(dt[i]), `${fmtKm(g[i].d)} · ${(dt[i]>=0?'+':'')}${dt[i].toFixed(2)} s · ${(sim.v[i]*3.6).toFixed(0)} / ${(cmp.v[i]*3.6).toFixed(0)} km/h`]; }, L0,R0,W);
 }
-function gridIdx(d){ return Math.max(0,Math.min(state.dyn.sim.N-1,Math.round(d/state.dyn.ds))); }
+function gridIdx(d){ const g=state.dyn.g; let lo=0, hi=g.length-1; if(d<=g[0].d) return 0; if(d>=g[hi].d) return hi;
+  while(hi-lo>1){ const m=(lo+hi)>>1; if(g[m].d<d) lo=m; else hi=m; } return (d-g[lo].d<g[hi].d-d)?lo:hi; }
 function hoverLine(X,T0,H,B0,fn,L0,R0,W){
   if(state.hoverD==null) return;
   const x=X(state.hoverD), [y,txt]=fn(state.hoverD);
@@ -1371,7 +1379,7 @@ function lineDisplay(r, base, ex, width){
   const xs=new Float32Array(N), ys=new Float32Array(N), zs=new Float32Array(N), nx=new Float32Array(N), nz=new Float32Array(N);
   let j=0;
   for(let i=0;i<N;i++){
-    const s=width/Math.max(2,W[i]);
+    const s=Math.min(3, width/Math.max(2,W[i]));     // display exaggeration of lateral offsets, capped
     xs[i]=r.Cx[i]+r.n[i]*s*r.Nx[i]; zs[i]=-(r.Cy[i]+r.n[i]*s*r.Ny[i]);
     while(j<P.length-2 && P[j+1].d<grid[i].d) j++;
     const t=(grid[i].d-P[j].d)/((P[j+1].d-P[j].d)||1); ys[i]=(P[j].e+(P[j+1].e-P[j].e)*Math.max(0,Math.min(1,t))-base)*ex;
