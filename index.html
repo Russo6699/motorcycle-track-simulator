@@ -265,7 +265,7 @@ details .group{gap:8px}
           <option value="centre">מרכז התחום</option>
         </select>
       </label>
-      <div class="note">זמן מינימלי: ממזער את T = ∫ √((1 − n·κ)² + n′²) / v ds תחת האילוצים: |n| בתוך הכביש פחות חצי רוחב האופנוע, θ = arctan(v²κ/g) ≤ arctan(μ), v ≤ √(μ·g·R), מעגל החיכוך (a<sub>long</sub>/μg)² + (a<sub>lat</sub>/μg)² ≤ 1, קצב הטייה dθ/dt ≤ ω, הספק המנוע ו־wheelie/stoppie.</div>
+      <div class="note">זמן מינימלי: ממזער את J = T + c·∫(dθ/dt)²dt, כאשר T = ∫ √((1 − n·κ)² + n′²) / v ds הוא זמן הנסיעה ו־c·∫(dθ/dt)²dt הוא קנס קטן על שינויי הטייה (מאמץ הרוכב), שמכריע רק בין קווים שזמנם כמעט זהה. הזמן המוצג הוא T. תחת האילוצים: |n| בתוך הכביש פחות חצי רוחב האופנוע, θ = arctan(v²κ/g) ≤ arctan(μ), v ≤ √(μ·g·R), מעגל החיכוך (a<sub>long</sub>/μg)² + (a<sub>lat</sub>/μg)² ≤ 1, קצב הטייה dθ/dt ≤ ω, הספק המנוע ו־wheelie/stoppie.</div>
       <div class="grid2">
         <label>השוואה מול
           <select id="cmp">
@@ -296,6 +296,7 @@ details .group{gap:8px}
             <label>tanh: מקדם רגישות C (מ׳)<input type="number" id="tC" step="10" min="5" max="1000" value="120"></label>
             <label>tanh: מבט קדימה σ (מ׳)<input type="number" id="tLook" step="5" min="0" max="200" value="30"></label>
             <label>קצב הטייה מרבי (°/ש׳, 0 = ללא)<input type="number" id="aRoll" step="5" min="0" max="400" value="90"></label>
+            <label>משקל מאמץ הרוכב c (0 = זמן בלבד)<input type="number" id="aEff" step="0.05" min="0" max="2" value="0.1"></label>
             <label>תקרת מהירות (קמ״ש, 0 = ללא)<input type="number" id="vCap" step="5" min="0" max="400" value="0"></label>
           </div>
           <label class="check"><input type="checkbox" id="legal"> הגבל למהירות המותרת לפי OSM</label>
@@ -1006,7 +1007,7 @@ function readParams(){
     wheelbase:num('mWb')/1000, cogH:num('aCog'), frontFrac:num('aFront'),
     CdA:num('aCdA'), rho:num('aRho'), Crr:num('aCrr'), mu:num('mMu'), leanMax:num('aLean'),
     bikeW:num('bikeW'), margin:num('margin'),
-    method:$('method').value, tanhC:num('tC'), sigmaLook:num('tLook'), sigmaKappa:num('sK'), sigmaCenter:2, rollRate:num('aRoll'),
+    method:$('method').value, tanhC:num('tC'), sigmaLook:num('tLook'), sigmaKappa:num('sK'), sigmaCenter:2, rollRate:num('aRoll'), effort:num('aEff'),
     fromRest:$('fromRest').checked, stopEnd:$('stopEnd').checked, useLegal:$('legal').checked, vCap:num('vCap')/3.6,
   };
   if(p.mass<=0||p.powerW<=0||p.mu<=0||p.cogH<=0) throw new Error('הספק, משקל, μ וגובה מרכז הכובד חייבים להיות חיוביים');
@@ -1101,7 +1102,8 @@ function showDyn(){
   renderCmpTable();
   let msg=`הושלם. רוחב הכביש נלקח מ־OSM ב־${Math.round(state.dyn.osmWidth*100)}% מהמסלול, בשאר ${$('defW').value} מ׳.`;
   if(optInfo) msg+=`\nהאופטימיזציה התחילה מ"${LINE_NAMES[optInfo.start]}" (${fmtTime(optInfo.startT,1)}) וקיצרה את הזמן ב־${(optInfo.startT-sim.time).toFixed(2)} ש׳`
-    + ` · ${optInfo.accepted.toLocaleString()} שינויים מתוך ${optInfo.trials.toLocaleString()} ניסיונות · ${(optInfo.ms/1000).toFixed(1)} ש׳ חישוב`+(optInfo.stopped?' (נעצרה ידנית)':'');
+    + ` · ${optInfo.accepted.toLocaleString()} שינויים מתוך ${optInfo.trials.toLocaleString()} ניסיונות · ${(optInfo.ms/1000).toFixed(1)} ש׳ חישוב`+(optInfo.stopped?' (נעצרה ידנית)':'')
+    + ` · קנס מאמץ c=${state.dyn.p.effort}`;
   dynStatus(msg);
   ['tabSpd','tabCmp'].forEach(id=>$(id).disabled=false); $('xLine').disabled=false;
   updateGradLegend(); drawDynOnMap(); build3D(); setTab(state.tab==='elev'?'speed':state.tab);
@@ -1137,7 +1139,7 @@ function updateGradLegend(){
   $('gMin').textContent=f(c.a); $('gMax').textContent=f(c.b);
 }
 $('colorBy').onchange=()=>{ if(!state.dyn) return; updateGradLegend(); drawDynOnMap(); build3D(); drawProfile(); };
-['mPow','mMass','mWb','mRider','mMu','mSurf','moto','corr','method','aLean','aCdA','aCog','aFront','aEta','aCrr','aRho','aRoll','bikeW','margin','defW','sK','tC','tLook','vCap','legal','fromRest','stopEnd']
+['mPow','mMass','mWb','mRider','mMu','mSurf','moto','corr','method','aLean','aCdA','aCog','aFront','aEta','aCrr','aRho','aRoll','aEff','bikeW','margin','defW','sK','tC','tLook','vCap','legal','fromRest','stopEnd']
   .forEach(id=>$(id).addEventListener('change',()=>{ if(state.dyn) computeDyn(); }));
 
 let dynLayer=null;
@@ -1331,42 +1333,70 @@ function ribbon(xs,ys,zs,nx,nz,half,colors,lift){
   const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(pos,3)); g.setAttribute('color',new THREE.BufferAttribute(col,3)); g.setIndex(idx); g.computeVertexNormals();
   return g;
 }
+/* Lateral display scale. Riding: always true scale (1). Overview: the road may be drawn wider so it stays visible
+   from far away; the racing line is then scaled by the SAME factor, so both stay consistent, and the label says so.
+   (Scaling only sideways bends the picture: a lane change of 2.7 m over 40 m drawn ×3 looks three times as sharp.) */
+function realWidths(){
+  if(state.dyn) return state.dyn.W;
+  const n=state.prof.pts.length, w=+$('defW').value||7; return new Float64Array(n).fill(w);
+}
+function latScale(){
+  if(ride.active) return 1;
+  const P=state.prof.pts, total=P[P.length-1].d, Wr=realWidths(); let wm=0; for(let i=0;i<Wr.length;i++) wm+=Wr[i]; wm/=Wr.length;
+  const wSet=+$('w').value, want = wSet>0 ? wSet : Math.max(8, total/350);
+  return Math.max(1, want/wm);
+}
+function elevAtD(d){ const P=state.prof.pts; let lo=0, hi=P.length-1; if(d<=P[0].d) return {e:P[0].e, q:P[0]}; if(d>=P[hi].d) return {e:P[hi].e, q:P[hi]};
+  while(hi-lo>1){ const m=(lo+hi)>>1; if(P[m].d<d) lo=m; else hi=m; } const t=(d-P[lo].d)/((P[hi].d-P[lo].d)||1);
+  return {e:P[lo].e+(P[hi].e-P[lo].e)*t, q:t<0.5?P[lo]:P[hi]}; }
 function build3D(){
   three.scene.background=new THREE.Color(css('--bg'));
   if(!state.prof) return;
   const P=state.prof.pts;
   if(three.group){ three.scene.remove(three.group); three.group.traverse(o=>{ o.geometry&&o.geometry.dispose(); o.material&&o.material.dispose(); }); }
-  const ex=+$('ex').value, total=P[P.length-1].d;
-  const wSet=+$('w').value; const width = wSet>0 ? wSet : Math.max(8, total/350);
-  three.width=width;
+  const ex=+$('ex').value, k=latScale(), Wr=realWidths();
+  let wm=0; for(let i=0;i<Wr.length;i++) wm+=Wr[i]; wm/=Wr.length;
+  const width=wm*k; three.width=width; three.k=k;
+  const wSet=+$('w').value;
+  $('wv').textContent = ride.active ? 'רוחב אמיתי (בנסיעה)' : (k<=1.01 ? 'רוחב אמיתי' : `מוגדל ×${k.toFixed(1)} לרוחב (בנסיעה: אמיתי)`) + (wSet>0?'':' · אוטומטי');
   const lat0=P[0].lat, lon0=P[0].lon, kx=Math.cos(toRad(lat0))*111320, kz=110540;
   let mn=Infinity; P.forEach(p=>mn=Math.min(mn,p.e)); const base=mn-Math.max(10,width);
   three.base=base; three.ex=ex;
   const loc = P.map(p=>new THREE.Vector3((p.lon-lon0)*kx, (p.e-base)*ex, -(p.lat-lat0)*kz));
   three.local=loc;
-  const g=new THREE.Group(), n=loc.length;
-  const xs=loc.map(v=>v.x), ys=loc.map(v=>v.y), zs=loc.map(v=>v.z), nx=[], nz=[];
-  for(let i=0;i<n;i++){ const a=loc[Math.max(0,i-1)], b=loc[Math.min(n-1,i+1)]; let tx=b.x-a.x, tz=b.z-a.z; const L=Math.hypot(tx,tz)||1; nx.push(-tz/L); nz.push(tx/L); }
-  const cols=P.map(p=>new THREE.Color(p.fix?css('--bridge'):gradeColor(p.g)));
-  g.add(new THREE.Mesh(ribbon(xs,ys,zs,nx,nz,width/2,cols,0),new THREE.MeshLambertMaterial({vertexColors:true, side:THREE.DoubleSide})));
+  const g=new THREE.Group();
+  // road surface: along the smoothed centre line used by the physics when it exists, otherwise along the route
+  let xs, ys, zs, nx, nz, half, cols;
+  if(state.dyn){
+    const {sim,g:grid}=state.dyn, N=sim.N; xs=new Float32Array(N); ys=new Float32Array(N); zs=new Float32Array(N); nx=new Float32Array(N); nz=new Float32Array(N); half=new Float32Array(N); cols=new Array(N);
+    for(let i=0;i<N;i++){ const E=elevAtD(grid[i].d); xs[i]=sim.Cx[i]; zs[i]=-sim.Cy[i]; ys[i]=(E.e-base)*ex; nx[i]=sim.Nx[i]; nz[i]=-sim.Ny[i]; half[i]=Wr[i]*k/2;
+      cols[i]=new THREE.Color(E.q.fix?css('--bridge'):gradeColor(E.q.g)); }
+  } else {
+    const n=loc.length; xs=loc.map(v=>v.x); ys=loc.map(v=>v.y); zs=loc.map(v=>v.z); nx=[]; nz=[];
+    for(let i=0;i<n;i++){ const a=loc[Math.max(0,i-1)], b=loc[Math.min(n-1,i+1)]; let tx=b.x-a.x, tz=b.z-a.z; const L=Math.hypot(tx,tz)||1; nx.push(-tz/L); nz.push(tx/L); }
+    half=width/2; cols=P.map(p=>new THREE.Color(p.fix?css('--bridge'):gradeColor(p.g)));
+  }
+  const n=xs.length;
+  g.add(new THREE.Mesh(ribbon(xs,ys,zs,nx,nz,half,cols,0),new THREE.MeshLambertMaterial({vertexColors:true, side:THREE.DoubleSide})));
   // curtain down to the base plane
   const curPos=new Float32Array(n*6), curCol=new Float32Array(n*6), idx=[];
-  for(let i=0;i<n;i++){ curPos.set([xs[i],ys[i],zs[i], xs[i],0,zs[i]], i*6); const c=cols[i].clone().multiplyScalar(0.55); curCol.set([c.r,c.g,c.b,c.r*0.6,c.g*0.6,c.b*0.6], i*6); if(i<n-1){ const k=i*2; idx.push(k,k+1,k+2, k+1,k+3,k+2); } }
+  for(let i=0;i<n;i++){ curPos.set([xs[i],ys[i],zs[i], xs[i],0,zs[i]], i*6); const c=cols[i].clone().multiplyScalar(0.55); curCol.set([c.r,c.g,c.b,c.r*0.6,c.g*0.6,c.b*0.6], i*6); if(i<n-1){ const q=i*2; idx.push(q,q+1,q+2, q+1,q+3,q+2); } }
   const cg=new THREE.BufferGeometry(); cg.setAttribute('position',new THREE.BufferAttribute(curPos,3)); cg.setAttribute('color',new THREE.BufferAttribute(curCol,3)); cg.setIndex(idx);
   g.add(new THREE.Mesh(cg,new THREE.MeshBasicMaterial({vertexColors:true, side:THREE.DoubleSide, transparent:true, opacity:0.45, depthWrite:false})));
   // centre line (lane divider)
-  const lg=new THREE.BufferGeometry().setFromPoints(loc.map(v=>new THREE.Vector3(v.x,v.y+Math.max(0.05,width*0.004),v.z)));
-  g.add(new THREE.Line(lg,new THREE.LineBasicMaterial({color:new THREE.Color(css('--road'))})));
+  const lift0=Math.max(0.03,width*0.004), cpts=[]; for(let i=0;i<n;i++) cpts.push(new THREE.Vector3(xs[i],ys[i]+lift0,zs[i]));
+  g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(cpts),new THREE.LineBasicMaterial({color:new THREE.Color(css('--road'))})));
   three.rl=null;
-  if(state.dyn) addRacingLine(g, base, ex, width);
-  three.bike=makeBike(three.rl?three.rl.scale:Math.max(1,width/7)); g.add(three.bike);
+  if(state.dyn) addRacingLine(g, base, ex, k);
+  three.bike=makeBike(k); g.add(three.bike);
   const box=new THREE.Box3().setFromPoints(loc), size=box.getSize(new THREE.Vector3()), ctr=box.getCenter(new THREE.Vector3());
   const span=Math.max(size.x,size.z)*1.2+width*4, cell=nice(span/20);
   const grid=new THREE.GridHelper(Math.ceil(span/cell)*cell, Math.ceil(span/cell), new THREE.Color(css('--muted')), new THREE.Color(css('--line')));
   grid.position.set(ctr.x,0,ctr.z); g.add(grid);
-  const mk=(v,c)=>{ const m=new THREE.Mesh(new THREE.SphereGeometry(width*0.6,20,14),new THREE.MeshLambertMaterial({color:c})); m.position.set(v.x,v.y+width*0.6,v.z); return m; };
-  g.add(mk(loc[0],0x2f9e57)); g.add(mk(loc[n-1],0xc83a2e));
-  three.cursor=new THREE.Mesh(new THREE.SphereGeometry(width*0.35,16,12),new THREE.MeshBasicMaterial({color:0xd5741f})); three.cursor.visible=false; g.add(three.cursor);
+  const mkR=Math.max(1.5,width*0.6);
+  const mk=(v,c)=>{ const m=new THREE.Mesh(new THREE.SphereGeometry(mkR,20,14),new THREE.MeshLambertMaterial({color:c})); m.position.set(v.x,v.y+mkR,v.z); return m; };
+  g.add(mk(loc[0],0x2f9e57)); g.add(mk(loc[loc.length-1],0xc83a2e));
+  three.cursor=new THREE.Mesh(new THREE.SphereGeometry(Math.max(1,width*0.35),16,12),new THREE.MeshBasicMaterial({color:0xd5741f})); three.cursor.visible=false; g.add(three.cursor);
   const keepView=!!three.box;
   three.scene.add(g); three.group=g; three.box=box;
   $('drive').disabled=false; $('fit').disabled=false; $('empty3d').hidden=true;
@@ -1374,32 +1404,30 @@ function build3D(){
   else if(!keepView || !three.viewSet){ fitView(); three.viewSet=true; }
 }
 // ideal line (and the comparison line) drawn on the road surface; lateral offsets are scaled with the displayed road width
-function lineDisplay(r, base, ex, width){
-  const {W,g:grid}=state.dyn, N=r.N, P=state.prof.pts;
+function lineDisplay(r, base, ex, k){
+  const {g:grid}=state.dyn, N=r.N, P=state.prof.pts;
   const xs=new Float32Array(N), ys=new Float32Array(N), zs=new Float32Array(N), nx=new Float32Array(N), nz=new Float32Array(N);
   let j=0;
   for(let i=0;i<N;i++){
-    const s=Math.min(3, width/Math.max(2,W[i]));     // display exaggeration of lateral offsets, capped
-    xs[i]=r.Cx[i]+r.n[i]*s*r.Nx[i]; zs[i]=-(r.Cy[i]+r.n[i]*s*r.Ny[i]);
+    xs[i]=r.Cx[i]+r.n[i]*k*r.Nx[i]; zs[i]=-(r.Cy[i]+r.n[i]*k*r.Ny[i]);     // same lateral scale as the road
     while(j<P.length-2 && P[j+1].d<grid[i].d) j++;
     const t=(grid[i].d-P[j].d)/((P[j+1].d-P[j].d)||1); ys[i]=(P[j].e+(P[j+1].e-P[j].e)*Math.max(0,Math.min(1,t))-base)*ex;
     nx[i]=r.Nx[i]; nz[i]=-r.Ny[i];
   }
   return {xs,ys,zs,nx,nz};
 }
-function addRacingLine(g, base, ex, width){
-  const {sim,cmp}=state.dyn, N=sim.N;
-  const L=lineDisplay(sim, base, ex, width);
+function addRacingLine(g, base, ex, k){
+  const {sim,cmp}=state.dyn, N=sim.N, width=three.width;
+  const L=lineDisplay(sim, base, ex, k);
   const col=dynColors().t.map(t=>new THREE.Color(rampColor(t)));
-  const lift=Math.max(0.08,width*0.012), half=Math.max(0.25,width*0.07);
+  const lift=Math.max(0.04,width*0.006), half=Math.max(0.18,width*0.035);
   g.add(new THREE.Mesh(ribbon(L.xs,L.ys,L.zs,L.nx,L.nz,half,col,lift),new THREE.MeshBasicMaterial({vertexColors:true, side:THREE.DoubleSide})));
   if($('showCmp').checked && cmp.lineName!==sim.lineName){
-    const C=lineDisplay(cmp, base, ex, width), gc=new THREE.Color(css('--cmp')), cc=new Array(N).fill(gc);
+    const C=lineDisplay(cmp, base, ex, k), gc=new THREE.Color(css('--cmp')), cc=new Array(N).fill(gc);
     g.add(new THREE.Mesh(ribbon(C.xs,C.ys,C.zs,C.nx,C.nz,half*0.45,cc,lift*0.8),new THREE.MeshBasicMaterial({vertexColors:true, side:THREE.DoubleSide, transparent:true, opacity:0.85})));
   }
   const sD=new Float64Array(N); for(let i=1;i<N;i++) sD[i]=sD[i-1]+Math.hypot(L.xs[i]-L.xs[i-1],L.ys[i]-L.ys[i-1],L.zs[i]-L.zs[i-1]);
-  let wm=0; for(let i=0;i<N;i++) wm+=state.dyn.W[i]; wm/=N;
-  three.rl={x:L.xs,y:L.ys,z:L.zs,sD,lift,scale:Math.max(1,width/wm)};
+  three.rl={x:L.xs,y:L.ys,z:L.zs,sD,lift,scale:k};
 }
 // simple motorcycle + rider, built along +z (forward), y up; rolled about its own forward axis
 function makeBike(scale){
@@ -1422,6 +1450,7 @@ function fitView(){
 $('fit').onclick=()=>{ if(ride.active) exitRide(); else fitView(); };
 $('ex').oninput=()=>{ const v=+$('ex').value; $('exv').textContent = v===1?'×1 (קנה מידה אמיתי)':'×'+v+' (מוגזם לתצוגה)'; if(state.prof) build3D(); };
 $('w').oninput=()=>{ const v=+$('w').value; $('wv').textContent=v?v+' מ׳':'אוטומטי'; if(state.prof) build3D(); };
+$('defW').addEventListener('change',()=>{ if(state.prof && !state.dyn) build3D(); });
 $('spd').oninput=()=>{ $('spdv').textContent='×'+$('spd').value; };
 
 /* ======================= ride along ======================= */
@@ -1433,7 +1462,7 @@ function rideTrack(){
   if(state.dyn && three.rl){ const rl=three.rl; return {dyn:true, x:rl.x, y:rl.y, z:rl.z, s:rl.sD, len:rl.sD[rl.sD.length-1], lift:rl.lift, scale:rl.scale}; }
   const loc=three.local, n=loc.length, s=new Float64Array(n), x=new Float32Array(n), y=new Float32Array(n), z=new Float32Array(n);
   for(let i=0;i<n;i++){ x[i]=loc[i].x; y[i]=loc[i].y; z[i]=loc[i].z; if(i) s[i]=s[i-1]+Math.hypot(x[i]-x[i-1],y[i]-y[i-1],z[i]-z[i-1]); }
-  return {dyn:false, x, y, z, s, len:s[n-1], lift:0.05, scale:Math.max(1,three.width/7)};
+  return {dyn:false, x, y, z, s, len:s[n-1], lift:0.05, scale:three.k||1};
 }
 function buildLeanGauge(limitDeg){
   const ticks=$('leanTicks'); let h='';
@@ -1447,7 +1476,8 @@ function buildLeanGauge(limitDeg){
 }
 function startRide(){
   if(!three.local) return;
-  ride.track=rideTrack(); ride.active=true; ride.paused=false; ride.s=0; ride.roll=0; ride.camPos=null; ride.camLook=null;
+  ride.active=true; build3D();                     // rebuild at true lateral scale
+  ride.track=rideTrack(); ride.paused=false; ride.s=0; ride.roll=0; ride.camPos=null; ride.camLook=null;
   three.ctl.enabled=false; three.cam.near=0.2; three.cam.updateProjectionMatrix();
   if(three.cursor) three.cursor.visible=false;
   $('ride').hidden=false; $('drive').hidden=true; $('pause').hidden=false; $('stop').hidden=false; $('seek').hidden=false;
@@ -1460,7 +1490,7 @@ function exitRide(){
   if(!ride.active) return;
   ride.active=false; ride.paused=false;
   $('ride').hidden=true; $('drive').hidden=false; $('pause').hidden=true; $('stop').hidden=true; $('seek').hidden=true;
-  if(three.bike) three.bike.visible=false;
+  build3D(); if(three.bike) three.bike.visible=false;
   three.ctl.enabled=true; fitView(); setHoverD(null);
 }
 function togglePause(){
