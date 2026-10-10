@@ -265,7 +265,7 @@ details .group{gap:8px}
           <option value="centre">מרכז התחום</option>
         </select>
       </label>
-      <div class="note">זמן מינימלי: ממזער את J = T + c·∫(dθ/dt)²dt, כאשר T = ∫ √((1 − n·κ)² + n′²) / v ds הוא זמן הנסיעה ו־c·∫(dθ/dt)²dt הוא קנס קטן על שינויי הטייה (מאמץ הרוכב), שמכריע רק בין קווים שזמנם כמעט זהה. הזמן המוצג הוא T. תחת האילוצים: |n| בתוך הכביש פחות חצי רוחב האופנוע, θ = arctan(v²κ/g) ≤ arctan(μ), v ≤ √(μ·g·R), מעגל החיכוך (a<sub>long</sub>/μg)² + (a<sub>lat</sub>/μg)² ≤ 1, קצב הטייה dθ/dt ≤ ω, הספק המנוע ו־wheelie/stoppie.</div>
+      <div class="note">זמן מינימלי: ממזער את T = ∫ √((1 − n·κ)² + n′²) / v ds תחת האילוצים: |n| בתוך הכביש פחות חצי רוחב האופנוע, θ = arctan(v²κ/g) ≤ arctan(μ), v ≤ √(μ·g·R), מעגל החיכוך (a<sub>long</sub>/μg)² + (a<sub>lat</sub>/μg)² ≤ 1, קצב הטייה dθ/dt ≤ ω, הספק המנוע ו־wheelie/stoppie.</div>
       <div class="grid2">
         <label>השוואה מול
           <select id="cmp">
@@ -296,7 +296,6 @@ details .group{gap:8px}
             <label>tanh: מקדם רגישות C (מ׳)<input type="number" id="tC" step="10" min="5" max="1000" value="120"></label>
             <label>tanh: מבט קדימה σ (מ׳)<input type="number" id="tLook" step="5" min="0" max="200" value="30"></label>
             <label>קצב הטייה מרבי (°/ש׳, 0 = ללא)<input type="number" id="aRoll" step="5" min="0" max="400" value="90"></label>
-            <label>משקל מאמץ הרוכב c (0 = זמן בלבד)<input type="number" id="aEff" step="0.05" min="0" max="2" value="0.1"></label>
             <label>תקרת מהירות (קמ״ש, 0 = ללא)<input type="number" id="vCap" step="5" min="0" max="400" value="0"></label>
           </div>
           <label class="check"><input type="checkbox" id="legal"> הגבל למהירות המותרת לפי OSM</label>
@@ -1007,7 +1006,7 @@ function readParams(){
     wheelbase:num('mWb')/1000, cogH:num('aCog'), frontFrac:num('aFront'),
     CdA:num('aCdA'), rho:num('aRho'), Crr:num('aCrr'), mu:num('mMu'), leanMax:num('aLean'),
     bikeW:num('bikeW'), margin:num('margin'),
-    method:$('method').value, tanhC:num('tC'), sigmaLook:num('tLook'), sigmaKappa:num('sK'), sigmaCenter:2, rollRate:num('aRoll'), effort:num('aEff'),
+    method:$('method').value, tanhC:num('tC'), sigmaLook:num('tLook'), sigmaKappa:num('sK'), sigmaCenter:2, rollRate:num('aRoll'),
     fromRest:$('fromRest').checked, stopEnd:$('stopEnd').checked, useLegal:$('legal').checked, vCap:num('vCap')/3.6,
   };
   if(p.mass<=0||p.powerW<=0||p.mu<=0||p.cogH<=0) throw new Error('הספק, משקל, μ וגובה מרכז הכובד חייבים להיות חיוביים');
@@ -1102,8 +1101,7 @@ function showDyn(){
   renderCmpTable();
   let msg=`הושלם. רוחב הכביש נלקח מ־OSM ב־${Math.round(state.dyn.osmWidth*100)}% מהמסלול, בשאר ${$('defW').value} מ׳.`;
   if(optInfo) msg+=`\nהאופטימיזציה התחילה מ"${LINE_NAMES[optInfo.start]}" (${fmtTime(optInfo.startT,1)}) וקיצרה את הזמן ב־${(optInfo.startT-sim.time).toFixed(2)} ש׳`
-    + ` · ${optInfo.accepted.toLocaleString()} שינויים מתוך ${optInfo.trials.toLocaleString()} ניסיונות · ${(optInfo.ms/1000).toFixed(1)} ש׳ חישוב`+(optInfo.stopped?' (נעצרה ידנית)':'')
-    + ` · קנס מאמץ c=${state.dyn.p.effort}`;
+    + ` · ${optInfo.accepted.toLocaleString()} שינויים מתוך ${optInfo.trials.toLocaleString()} ניסיונות · ${(optInfo.ms/1000).toFixed(1)} ש׳ חישוב`+(optInfo.stopped?' (נעצרה ידנית)':'');
   dynStatus(msg);
   ['tabSpd','tabCmp'].forEach(id=>$(id).disabled=false); $('xLine').disabled=false;
   updateGradLegend(); drawDynOnMap(); build3D(); setTab(state.tab==='elev'?'speed':state.tab);
@@ -1139,7 +1137,7 @@ function updateGradLegend(){
   $('gMin').textContent=f(c.a); $('gMax').textContent=f(c.b);
 }
 $('colorBy').onchange=()=>{ if(!state.dyn) return; updateGradLegend(); drawDynOnMap(); build3D(); drawProfile(); };
-['mPow','mMass','mWb','mRider','mMu','mSurf','moto','corr','method','aLean','aCdA','aCog','aFront','aEta','aCrr','aRho','aRoll','aEff','bikeW','margin','defW','sK','tC','tLook','vCap','legal','fromRest','stopEnd']
+['mPow','mMass','mWb','mRider','mMu','mSurf','moto','corr','method','aLean','aCdA','aCog','aFront','aEta','aCrr','aRho','aRoll','bikeW','margin','defW','sK','tC','tLook','vCap','legal','fromRest','stopEnd']
   .forEach(id=>$(id).addEventListener('change',()=>{ if(state.dyn) computeDyn(); }));
 
 let dynLayer=null;

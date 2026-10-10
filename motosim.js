@@ -211,7 +211,6 @@ function model(g, inp, p){
       return Math.hypot(v*v*Math.abs(k), aT)/(mu*gE);
     },
     gEff:function(i, v){ var gE=G*cosP[i]+v*v*kv[i]; return gE<0.1?0.1:gE; },
-    lean:function(i, v, k){ var gE=G*cosP[i]+v*v*kv[i]; if(gE<0.1) gE=0.1; return Math.atan(v*v*k/gE); },   // signed, rad
     topSpeed:function(){ var v=60; for(var it=0;it<60;it++){ var f=kD*v*v*v+m*G*Crr*v-Pw, df=3*kD*v*v+m*G*Crr; v-=f/df; if(v<1) v=1; } return v; }
   };
 }
@@ -266,11 +265,9 @@ function evalLine(g, n, inp, p){
     limit[i] = (w>=vmax[i]-0.05) ? M.vtype(i,kw[i],kp[i]) : (vb[i]<vf[i]-0.05 ? 'brake' : 'accel');
     if(i<N-1){ var sv=w+vb[i+1]; t[i+1]=t[i]+2*dsT[i]/(sv>1e-3?sv:1e-3); }   // exact for constant acceleration
   }
-  var effort=0;
-  for(i=0;i<N-1;i++){ var th0=M.lean(i,vb[i],kw[i]), th1=M.lean(i+1,vb[i+1],kw[i+1]), dti=t[i+1]-t[i]; if(dti>0) effort+=(th1-th0)*(th1-th0)/dti; }
   return {N:N, Cx:g.Cx, Cy:g.Cy, Nx:g.Nx, Ny:g.Ny, n:Float64Array.from(n), Rx:Rx, Ry:Ry, sR:sR, dsT:dsT, kc:g.kc, k:kw,
           v:vb, vmax:vmax, lean:lean, grip:grip, aLat:aLat, aLong:aLong, t:t, limit:limit, phi:g.phi, kv:g.kv,
-          latCoef:M.latCoef, time:t[N-1], effort:effort};
+          latCoef:M.latCoef, time:t[N-1]};
 }
 
 /* ---------- candidate lines ---------- */
@@ -355,15 +352,7 @@ function createOptimizer(g, n0, inp, p){
   A.vb[N-1]=p.stopEnd?0:A.vf[N-1];
   for(i=N-2;i>=0;i--) A.vb[i]=M.bwd(A.vb[i+1],i,A.kw[i],A.kw[i+1],A.dsT[i],A.vf[i]);
   function dt(d, v1, v2){ var s=v1+v2; return 2*d/(s>1e-3?s:1e-3); }
-  /* Regularisation. Where the tyre is not at its limit (power- or traction-limited straights, gentle bends at high
-     speed) many different lines give the same time to within milliseconds, and a pure time objective drifts into
-     whichever one shortens the path by a few centimetres, e.g. weaving to the inside of every 1–3 km radius kink at
-     250 km/h with 15–20° of lean. Following standard practice in minimum-lap-time optimal control (a small penalty
-     on the rate of the control inputs), the optimiser minimises J = T + c·∫(dθ/dt)²dt, rider effort on the roll
-     axis. c is small, so it only decides between lines whose times are practically equal; the reported time is T. */
-  var cEff=(p.effort!=null?p.effort:0.1);
-  function effSeg(X,q){ var a=M.lean(q,X.vb[q],X.kw[q]), b=M.lean(q+1,X.vb[q+1],X.kw[q+1]), d=b-a; return d*d/dt(X.dsT[q],X.vb[q],X.vb[q+1]); }
-  var T=0, Eff=0; for(i=0;i<N-1;i++){ T+=dt(A.dsT[i],A.vb[i],A.vb[i+1]); if(cEff>0) Eff+=effSeg(A,i); }
+  var T=0; for(i=0;i<N-1;i++) T+=dt(A.dsT[i],A.vb[i],A.vb[i+1]);
   names.forEach(function(k){ S[k].set(A[k]); });
   var T0=T, trials=0, accepted=0;
 
@@ -400,11 +389,10 @@ function createOptimizer(g, n0, inp, p){
       S.vb[q]=M.bwd(S.vb[q+1],q,S.kw[q],S.kw[q+1],S.dsT[q],S.vf[q]); bStart=q;
       if(q<p0 && Math.abs(S.vb[q]-A.vb[q])<1e-9) break;
     }
-    var s0=Math.max(0,Math.min(bStart,a-1,wa)), s1=Math.min(N-2,Math.max(q0,b,wb)), dT=0, dE=0;
-    for(q=s0;q<=s1;q++){ dT+=dt(S.dsT[q],S.vb[q],S.vb[q+1])-dt(A.dsT[q],A.vb[q],A.vb[q+1]); if(cEff>0) dE+=effSeg(S,q)-effSeg(A,q); }
+    var s0=Math.max(0,Math.min(bStart,a-1)), s1=Math.min(N-2,Math.max(q0,b)), dT=0;
+    for(q=s0;q<=s1;q++) dT+=dt(S.dsT[q],S.vb[q],S.vb[q+1])-dt(A.dsT[q],A.vb[q],A.vb[q+1]);
     var r0=Math.max(0,Math.min(wa,p0,bStart,a-1)), r1=Math.min(N-1,Math.max(wb,fEnd,q0,b));
-    var dJ=dT+cEff*dE;
-    if(dJ<-1e-7){ copy(S,A,r0,r1); T+=dT; Eff+=dE; accepted++; return dJ; }
+    if(dT<-1e-7){ copy(S,A,r0,r1); T+=dT; accepted++; return dT; }
     copy(A,S,r0,r1); return 0;
   }
 
@@ -419,13 +407,13 @@ function createOptimizer(g, n0, inp, p){
         for(var ai=0; ai<amps.length; ai++){
           var amp=amps[ai], stage=round*widths.length*amps.length+wi*amps.length+ai;
           for(var sweep=0; sweep<3; sweep++){
-            var before=T+cEff*Eff, k=0;
+            var before=T, k=0;
             for(var c=0; c<N; c+=stride){
               if(trial(c,hw,amp)<0){ for(var r=0;r<3 && trial(c,hw,amp)<0;r++); }
               else if(trial(c,hw,-amp)<0){ for(var r2=0;r2<3 && trial(c,hw,-amp)<0;r2++); }
               if(++k%40===0) yield (stage+(sweep+c/N)/3)/stages;
             }
-            if(before-(T+cEff*Eff)<1e-4*Math.max(1,T/60)) break;
+            if(before-T<1e-4*Math.max(1,T/60)) break;
           }
         }
       }
@@ -435,7 +423,6 @@ function createOptimizer(g, n0, inp, p){
   return {
     T0:T0,
     get T(){ return T; },
-    get effort(){ return Eff; },
     get n(){ return A.n; },
     get stats(){ return {trials:trials, accepted:accepted}; },
     step:function(budgetMs){                            // run for about budgetMs → {done, T, frac}
