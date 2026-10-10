@@ -114,6 +114,19 @@ async function run(poly, opt, hooks){
     prog(base+span); await tick();
   }
   for(var i=0;i<N;i++){ var ww=wsum[i]||1; off[i]/=ww; raw[i]/=ww; hf[i]/=ww; rel[i]/=ww; wok[i]/=ww; }
+  // stretches where the image cannot show the road (tunnels, given as [d0,d1] along the route): the centre and
+  // width are interpolated between the two ends, i.e. the shape follows the map route there
+  var trust=opt.trustMap||[], hidden=0;
+  trust.forEach(function(iv){
+    var a=0, b; while(a<N && st.D[a]<iv[0]) a++; b=a; while(b<N && st.D[b]<=iv[1]) b++;
+    if(b<=a || (a===0 && b>=N)) return; hidden+=st.D[b-1]-st.D[a];
+    var L=a-1, R=b, arrs=[off,raw,hf];
+    for(var k=a;k<b;k++){
+      var t=(L>=0 && R<N) ? (k-L)/(R-L) : (L>=0 ? 0 : 1);
+      arrs.forEach(function(A){ var va=L>=0?A[L]:A[R], vb=R<N?A[R]:A[L]; A[k]=va+(vb-va)*t; });
+      rel[k]=0; wok[k]=0;
+    }
+  });
   msg('מעביר עקומת B‑spline חלקה (scipy splprep) ודוגם '+outN.toLocaleString('en-US')+' נקודות…'); await tick();
   var G={X_js:st.X, Y_js:st.Y, Nx_js:st.Nx, Ny_js:st.Ny, D_js:st.D, off_js:off, raw_js:raw, half_js:hf, rel_js:rel, wok_js:wok};
   Object.keys(G).forEach(function(k){ py.globals.set(k,G[k]); });
@@ -123,7 +136,7 @@ async function run(poly, opt, hooks){
   Object.keys(G).forEach(function(k){ py.globals.delete(k); });
   var x=pyArr(fr,'x'), y=pyArr(fr,'y'), out={width:pyArr(fr,'width'), conf:pyArr(fr,'conf'), kappa:pyArr(fr,'kappa'), D:pyArr(fr,'D')};
   var stp=fr.get('stats'); out.stats=stp.toJs({dict_converter:Object.fromEntries}); stp.destroy(); fr.destroy();
-  out.stats.sigma_lab=sigLab; out.stats.tiles=nTiles; out.stats.sections=secs.length;
+  out.stats.sigma_lab=sigLab; out.stats.tiles=nTiles; out.stats.sections=secs.length; out.stats.hidden_m=hidden;
   out.lat=new Float64Array(x.length); out.lon=new Float64Array(x.length);
   for(var j=0;j<x.length;j++){ out.lat[j]=st.lat0+y[j]/st.ky; out.lon[j]=st.lon0+x[j]/st.kx; }
   // per station, for drawing the detected road edges on the map

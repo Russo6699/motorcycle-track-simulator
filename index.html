@@ -1072,7 +1072,20 @@ async function refineRoute(){
   const my=++satRun, t0=performance.now();
   satBusy=true; $('satGo').disabled=true; $('satProg').hidden=false; $('satBar').style.width='0%';
   try{
-    const r=await SatCorridor.run(geom.map(q=>q.slice()), {}, {
+    // tunnels cannot be seen from above: there the centre is bridged between the portals (OSM tunnel tags)
+    let tunnels=[], tunnelNote='';
+    try{
+      satStatus('בודק ב־OpenStreetMap אם יש מנהרות לאורך הדרך…');
+      let ways = osmWaysCache && osmWaysCache.geom===geom ? osmWaysCache.ways : null;
+      const tp=resample(geom, 20);
+      if(!ways){ ways=await fetchRoadInfo(tp); if(my!==satRun) return; osmWaysCache={geom, ways}; }
+      matchRoadInfo(tp, ways);
+      for(let i=0;i<tp.length;i++){ if(!isTunnel(tp[i].osm)) continue; let j=i; while(j+1<tp.length && isTunnel(tp[j+1].osm)) j++;
+        tunnels.push([tp[i].d-25, tp[j].d+25]); i=j; }
+      if(tunnels.length) tunnelNote=(tunnels.length===1?'במנהרה אחת':`ב־${tunnels.length} מנהרות`)+' (לפי OSM) הכביש לא נראה מלמעלה, ושם המרכז מגושר בין שני הפתחים לפי צורת קו המפה.\n';
+    }catch(e){ tunnelNote='לא ניתן היה לבדוק מנהרות ב־OpenStreetMap ('+e.message+').\n'; }
+    if(my!==satRun) return;
+    const r=await SatCorridor.run(geom.map(q=>q.slice()), {trustMap:tunnels}, {
       roadfitSrc: $('roadfit-py').textContent,
       msg: m=>{ if(my===satRun) satStatus(m); },
       prog: f=>{ if(my===satRun) $('satBar').style.width=(f*100).toFixed(1)+'%'; } });
@@ -1086,6 +1099,7 @@ async function refineRoute(){
       + `סטיית קו המפה ממרכז הכביש: ממוצע ${s.shift_mean.toFixed(1)} מ׳, ב־95% מהדרך עד ${s.shift_p95.toFixed(1)} מ׳, מרבית ${s.shift_max.toFixed(1)} מ׳.\n`
       + `רוחב כביש חציוני ${s.width_median.toFixed(1)} מ׳ (נמדד ישירות ב־${Math.round(s.width_measured_frac*100)}% מהדרך; היכן ששפת הכביש בצל עצים או בצומת, לפי הקטעים הסמוכים).\n`
       + (s.bridged_frac>=0.005 ? `ב־${Math.round(s.bridged_frac*100)}% מהדרך (צמתים, מפרצים) רק שפה אחת של הכביש נראית, ושם המרכז מגושר מהקטעים שמשני הצדדים.\n` : '')
+      + tunnelNote
       + `${s.out_n.toLocaleString('en-US')} נקודות במרווח ${(s.spacing*100).toFixed(0)} ס״מ. תצלום: Esri World Imagery, כ־0.5 מ׳ לפיקסל.`
       + (state.prof ? '\nהמסלול מחושב מחדש לפי הדרך המשופרת.' : '\nעכשיו אפשר ללחוץ "חשב מסלול תלת־ממדי".'));
     if(state.prof) compute();
@@ -1339,9 +1353,9 @@ function computeGrades(p, win){
     p[i].g = (p[b].e-p[a].e)/((p[b].d-p[a].d)||1)*100;
   }
 }
-let computing=false;
+let computing=false, computeAgain=false, osmWaysCache=null;
 async function compute(){
-  if(computing) return;
+  if(computing){ computeAgain=true; return; }   // e.g. the satellite step finished while this was running
   if(!state.geom || state.geom.length<2){ status('צריך לפחות שתי נקודות על המפה, או קובץ GPX.', true); return; }
   computing=true; $('go').disabled=true;
   try{
@@ -1361,6 +1375,7 @@ async function compute(){
       try{
         status('שולף נתוני דרך מ־OpenStreetMap (גשרים, מנהרות, רוחב, מהירות מותרת)…');
         const ways=await fetchRoadInfo(pts, f=>status(`שולף נתוני דרך מ־OpenStreetMap… ${Math.round(f*100)}%`));
+        if(!refined) osmWaysCache={geom:state.geom, ways};
         const frac=matchRoadInfo(pts, ways, refined?18:12);
         osmNote=` נתוני OSM הותאמו ל־${Math.round(frac*100)}% מהמסלול.`;
         if($('osmFix').checked && src!=='gpx'){
@@ -1381,7 +1396,7 @@ async function compute(){
   }catch(err){
     state.prof=null; enableExports(false);
     status('לא ניתן היה לשלוף נתוני גובה אמיתיים: '+err.message+'\nלא מוצג מסלול כדי לא להציג נתונים לא אמיתיים. נסו מקור גובה אחר.', true);
-  }finally{ computing=false; $('go').disabled=false; }
+  }finally{ computing=false; $('go').disabled=false; if(computeAgain){ computeAgain=false; compute(); } }
 }
 $('go').onclick = compute;
 $('win').oninput = () => { $('winv').textContent=$('win').value; if(state.prof){ computeGrades(state.prof.pts, +$('win').value); showStats(); drawProfile(); build3D(); } };
