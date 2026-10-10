@@ -1,10 +1,11 @@
 """Streamlit entry point for the motorcycle track simulator.
 
-The app itself is a browser application (index.html + motosim.js): map, real elevation data,
+The app itself is a browser application (index.html + motosim.js + satcorridor.js + roadfit.py): map, real elevation data,
 3D road, ideal-line optimisation and ride-along. Streamlit only serves it full-page, so the
 existing Streamlit Cloud link keeps working. index.html can also be opened directly or served
 by GitHub Pages.
 """
+import re
 from pathlib import Path
 
 import streamlit as st
@@ -31,9 +32,15 @@ HERE = Path(__file__).parent
 @st.cache_data
 def load_app() -> str:
     html = (HERE / "index.html").read_text(encoding="utf-8")
-    engine = (HERE / "motosim.js").read_text(encoding="utf-8")
-    # inline the physics engine: the component iframe cannot load sibling files
-    return html.replace('<script src="motosim.js"></script>', "<script>\n" + engine + "\n</script>")
+    # the component iframe cannot load sibling files, so the scripts are inlined
+    for name in ("motosim.js", "satcorridor.js"):
+        code = (HERE / name).read_text(encoding="utf-8")
+        html = html.replace(f'<script src="{name}"></script>', "<script>\n" + code + "\n</script>")
+    # the satellite road-extraction step runs roadfit.py in the browser (Pyodide); embed the current file
+    roadfit = (HERE / "roadfit.py").read_text(encoding="utf-8")
+    html = re.sub(r'(<script type="text/x-python" id="roadfit-py">\n).*?(</script>)',
+                  lambda m: m.group(1) + roadfit + m.group(2), html, count=1, flags=re.S)
+    return html
 
 
 components.html(load_app(), height=1050, scrolling=True)
