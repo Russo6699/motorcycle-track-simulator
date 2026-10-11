@@ -1374,8 +1374,10 @@ async function compute(){
     {
       try{
         status('שולף נתוני דרך מ־OpenStreetMap (גשרים, מנהרות, רוחב, מהירות מותרת)…');
-        const ways=await fetchRoadInfo(pts, f=>status(`שולף נתוני דרך מ־OpenStreetMap… ${Math.round(f*100)}%`));
-        if(!refined) osmWaysCache={geom:state.geom, ways};
+        // the ways near this route may already be here (the satellite step fetches them to find tunnels);
+        // they also cover the traced road, which stays within the query radius of the map line
+        let ways = osmWaysCache && osmWaysCache.geom===state.geom ? osmWaysCache.ways : null;
+        if(!ways){ ways=await fetchRoadInfo(pts, f=>status(`שולף נתוני דרך מ־OpenStreetMap… ${Math.round(f*100)}%`)); osmWaysCache={geom:state.geom, ways}; }
         const frac=matchRoadInfo(pts, ways, refined?18:12);
         osmNote=` נתוני OSM הותאמו ל־${Math.round(frac*100)}% מהמסלול.`;
         if($('osmFix').checked && src!=='gpx'){
