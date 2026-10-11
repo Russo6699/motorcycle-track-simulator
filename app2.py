@@ -29,8 +29,13 @@ st.markdown(
 HERE = Path(__file__).parent
 
 
+FILES = ("index.html", "motosim.js", "satcorridor.js", "roadfit.py")
+
+
 @st.cache_data
-def load_app() -> str:
+def load_app(stamp: tuple) -> str:
+    # `stamp` (size + modification time of every file) is part of the cache key, so a new version of any
+    # of the files is served as soon as it is deployed instead of the cached old page
     html = (HERE / "index.html").read_text(encoding="utf-8")
     # the component iframe cannot load sibling files, so the scripts are inlined
     for name in ("motosim.js", "satcorridor.js"):
@@ -43,4 +48,5 @@ def load_app() -> str:
     return html
 
 
-components.html(load_app(), height=1050, scrolling=True)
+stamp = tuple((f, (HERE / f).stat().st_size, (HERE / f).stat().st_mtime_ns) for f in FILES)
+components.html(load_app(stamp), height=1050, scrolling=True)
